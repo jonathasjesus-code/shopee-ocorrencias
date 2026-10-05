@@ -289,15 +289,19 @@ const MI=({n,s})=><span className="material-icons-round mi" style={s}>{n}</span>
 function Toast({toasts}){return<div className="toast-c">{toasts.map(t=><div key={t.id} className={`toast ${t.type==='success'?'suc':t.type==='error'?'err':'inf'}`}><MI n={t.type==='success'?'check_circle':t.type==='error'?'error':'info'} s={{color:t.type==='success'?'var(--gn)':t.type==='error'?'var(--rd)':'var(--bl)',fontSize:18}}/><span className="toast-m">{t.message}</span></div>)}</div>;}
 
 // === SCANNER ===
-function QRScanner({onScan,onClose}){
+function QRScanner({onScan,onClose,mode}){
   const[scanning,setScanning]=useState(false);const[mi,setMi]=useState('');const[scanResult,setScanResult]=useState('');
   const hRef=useRef(null);const mountedRef=useRef(true);
+  const isAT=mode==='at';
+  const modeLabel=isAT?'AT (Log)':'Driver ID';
+  const modeIcon=isAT?'receipt_long':'person_search';
+  const modeColor=isAT?'var(--bl)':'var(--sh)';
+  const modePlaceholder=isAT?'Ex: AT20260903994EM':'Ex: 2405676';
 
   useEffect(()=>{mountedRef.current=true;return()=>{mountedRef.current=false;if(hRef.current){try{hRef.current.stop().then(()=>{try{hRef.current.clear();}catch(e){}}).catch(()=>{try{hRef.current.clear();}catch(e){}});}catch(e){}};};},[]);
 
   const start=useCallback(()=>{
     setScanning(true);
-    // Give DOM time to render the container
     setTimeout(()=>{
       const el=document.getElementById('qr-scanner-region');
       if(!el||!window.Html5Qrcode){setScanning(false);return;}
@@ -308,51 +312,39 @@ function QRScanner({onScan,onClose}){
           {facingMode:"environment"},
           {fps:10,qrbox:{width:220,height:220},aspectRatio:1.0},
           (decodedText)=>{
-            // Stop scanner first, then process result
             scanner.stop().then(()=>{try{scanner.clear();}catch(e){}}).catch(()=>{});
             hRef.current=null;
-            if(mountedRef.current){
-              setScanning(false);
-              setScanResult(decodedText);
-            }
+            if(mountedRef.current){setScanning(false);setScanResult(decodedText);}
           },
-          (errorMessage)=>{/* ignore scan errors */}
-        ).catch((err)=>{
-          console.warn('Scanner start failed:',err);
-          if(mountedRef.current)setScanning(false);
-        });
-      }catch(e){
-        console.warn('Scanner init failed:',e);
-        if(mountedRef.current)setScanning(false);
-      }
+          ()=>{}
+        ).catch((err)=>{console.warn('Scanner err:',err);if(mountedRef.current)setScanning(false);});
+      }catch(e){console.warn('Scanner init err:',e);if(mountedRef.current)setScanning(false);}
     },500);
   },[]);
 
   const stop=useCallback(()=>{
-    if(hRef.current){
-      try{hRef.current.stop().then(()=>{try{hRef.current.clear();}catch(e){}}).catch(()=>{try{hRef.current.clear();}catch(e){}});}catch(e){}
-      hRef.current=null;
-    }
+    if(hRef.current){try{hRef.current.stop().then(()=>{try{hRef.current.clear();}catch(e){}}).catch(()=>{try{hRef.current.clear();}catch(e){}});}catch(e){}hRef.current=null;}
     setScanning(false);
   },[]);
 
   const handleSubmit=useCallback((val)=>{
-    if(!val||!val.trim())return;
-    stop();
-    // Use setTimeout to ensure scanner cleanup before parent state change
+    if(!val||!val.trim())return;stop();
     setTimeout(()=>onScan(val.trim()),100);
   },[onScan,stop]);
 
-  // Auto-submit scan result
   useEffect(()=>{if(scanResult){handleSubmit(scanResult);setScanResult('');}},[scanResult,handleSubmit]);
-
   const handleClose=useCallback(()=>{stop();setTimeout(()=>onClose(),100);},[stop,onClose]);
 
   return(<div className="modal-ov" onClick={e=>{if(e.target===e.currentTarget)handleClose();}}>
-    <div className="modal"><div className="modal-h"><h3><MI n="qr_code_scanner" s={{color:'var(--sh)'}}/>Scanner</h3><button className="modal-x" onClick={handleClose}><MI n="close"/></button></div>
-    <div className="modal-b">{!scanning?(<div style={{textAlign:'center'}}><button className="btn btn-p btn-lg" onClick={start} style={{marginBottom:18}}><MI n="camera_alt"/>Abrir Câmera</button><div className="sdiv"><span>ou digite</span></div><div style={{display:'flex',gap:6,marginTop:10}}><input className="fi" placeholder="Driver ID / AT..." value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&mi.trim())handleSubmit(mi);}} autoFocus/><button className="btn btn-p" onClick={()=>handleSubmit(mi)}><MI n="search"/></button></div></div>):(<div><div id="qr-scanner-region" style={{width:'100%',minHeight:280,borderRadius:10,overflow:'hidden'}}></div><button className="btn btn-s" onClick={stop} style={{width:'100%',marginTop:8}}><MI n="close"/>Fechar câmera</button></div>)}</div></div></div>);
+    <div className="modal"><div className="modal-h"><h3><MI n={modeIcon} s={{color:modeColor}}/>Scanner — {modeLabel}</h3><button className="modal-x" onClick={handleClose}><MI n="close"/></button></div>
+    <div className="modal-b">
+      <div style={{background:isAT?'var(--bl1)':'var(--o50)',padding:'8px 12px',borderRadius:8,marginBottom:14,fontSize:11,fontWeight:600,color:isAT?'#1E40AF':'var(--o700)',display:'flex',alignItems:'center',gap:6}}>
+        <MI n={isAT?'receipt_long':'badge'} s={{fontSize:16}}/>
+        {isAT?'Escaneie o QR Code do LOG para capturar a AT completa (ex: AT20260903994EM)':'Escaneie o QR Code do crachá para capturar o Driver ID'}
+      </div>
+      {!scanning?(<div style={{textAlign:'center'}}><button className="btn btn-p btn-lg" onClick={start} style={{marginBottom:18,background:isAT?'linear-gradient(135deg,var(--bl),#1E40AF)':undefined}}><MI n="camera_alt"/>Abrir Câmera</button><div className="sdiv"><span>ou digite</span></div><div style={{display:'flex',gap:6,marginTop:10}}><input className="fi" placeholder={modePlaceholder} value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&mi.trim())handleSubmit(mi);}} autoFocus/><button className="btn btn-p" onClick={()=>handleSubmit(mi)} style={{background:isAT?'var(--bl)':undefined}}><MI n="search"/></button></div></div>):(<div><div id="qr-scanner-region" style={{width:'100%',minHeight:280,borderRadius:10,overflow:'hidden'}}></div><button className="btn btn-s" onClick={stop} style={{width:'100%',marginTop:8}}><MI n="close"/>Fechar câmera</button></div>)}
+    </div></div></div>);
 }
-
 // === DRIVER CARD ===
 function DriverCard({driver}){
   if(!driver)return null;
@@ -460,7 +452,7 @@ function App(){
   const[profile,setProfile]=useState('');const[selBau,setSelBau]=useState('');const[qtd,setQtd]=useState('');
   const[motivo,setMotivo]=useState('');const[ocType,setOcType]=useState('');const[obs,setObs]=useState('');
   const[atCode,setAtCode]=useState('');const[img,setImg]=useState(null);const[status,setStatus]=useState('Pendente');
-  const[showScan,setShowScan]=useState(false);const[geo,setGeo]=useState(null);
+  const[showScan,setShowScan]=useState('');const[scanMode,setScanMode]=useState('driver');const[geo,setGeo]=useState(null);
   // Filters
   const[fHub,setFHub]=useState('');const[fStatus,setFStatus]=useState('');const[fMotivo,setFMotivo]=useState('');const[fPerfil,setFPerfil]=useState('');const[fSearch,setFSearch]=useState('');
 
@@ -510,26 +502,69 @@ function App(){
     else toast(`"${q}" não encontrado`,'error');
   },[drivers,toast]);
 
+  // === PARSE QR DATA ===
+  const parseQRData=useCallback((raw)=>{
+    const result={at:null,driverId:null,driverName:null,qty:null,raw:raw};
+    // Extract AT code: starts with AT, alphanumeric (e.g. AT20260903994EM)
+    const atMatch=raw.match(/AT\d{8,}\w*/i);
+    if(atMatch) result.at=atMatch[0];
+    // Extract driver ID from [1234567] pattern
+    const driverBracket=raw.match(/\[(\d{4,})\]/);
+    if(driverBracket) result.driverId=driverBracket[1];
+    // Extract driver name after the bracket: [2405676] SERGIO LUCAS SEIXAS
+    const nameMatch=raw.match(/\[\d+\]\s*([A-ZÀ-Ú][A-ZÀ-Ú\s]{3,})/);
+    if(nameMatch) result.driverName=nameMatch[1].trim();
+    // Extract quantity: "Number of forward orders: 90" or just standalone number near "Pedidos"
+    const qtyMatch=raw.match(/(?:Number of (?:forward )?orders|Pedidos)[:\s]*(\d+)/i);
+    if(qtyMatch) result.qty=parseInt(qtyMatch[1]);
+    // If no AT found but raw starts with AT
+    if(!result.at && raw.toUpperCase().startsWith('AT')) result.at=raw.split(/[\s\n]/)[0];
+    // If no driver ID found, try pure numeric (6-7 digits)
+    if(!result.driverId){const numMatch=raw.match(/\b(\d{6,7})\b/);if(numMatch)result.driverId=numMatch[1];}
+    return result;
+  },[]);
+
   const handleScan=useCallback((code)=>{
-    setShowScan(false);
+    setShowScan('');
     if(!code)return;
     const cleaned=code.trim();
-    // Try to match a driver ID (numeric 4+ digits)
-    const driverIdMatch=cleaned.match(/\d{4,}/);
-    if(driverIdMatch){
-      const did=driverIdMatch[0];
-      setDSearch(did);
-      // Search driver
-      const ql=did.toLowerCase();
-      const f=drivers.find(d=>d.driver_id===ql||d.name.toLowerCase().includes(ql));
-      if(f){setSelDriver(f);setDSearch(f.driver_id);toast(`Driver encontrado: ${f.name}`);}
-      else{toast(`Código escaneado: ${did} (driver não encontrado na base)`,'info');}
+    const parsed=parseQRData(cleaned);
+
+    if(scanMode==='at'){
+      // AT MODE: prioritize extracting AT code
+      if(parsed.at){
+        setAtCode(parsed.at);
+        toast(`AT capturada: ${parsed.at}`,'success');
+        // Also auto-fill quantity if found
+        if(parsed.qty){setQtd(String(parsed.qty));toast(`Pacotes: ${parsed.qty}`,'info');}
+        // Also auto-fill driver if found in QR
+        if(parsed.driverId){
+          const f=drivers.find(d=>d.driver_id===parsed.driverId);
+          if(f){setSelDriver(f);setDSearch(f.driver_id);toast(`Driver: ${f.name}`);}
+          else{setDSearch(parsed.driverId);}
+        }
+      } else {
+        // Fallback: use entire scanned text as AT
+        setAtCode(cleaned);
+        toast(`AT: ${cleaned}`,'info');
+      }
     } else {
-      // Treat as AT code
-      setAtCode(cleaned);
-      toast(`AT escaneado: ${cleaned}`,'info');
+      // DRIVER MODE: prioritize extracting driver ID
+      if(parsed.driverId){
+        const f=drivers.find(d=>d.driver_id===parsed.driverId);
+        if(f){setSelDriver(f);setDSearch(f.driver_id);toast(`Driver: ${f.name}`);}
+        else{setDSearch(parsed.driverId);toast(`ID ${parsed.driverId} escaneado (não encontrado na base)`,'info');}
+      } else {
+        // Try as pure search
+        const ql=cleaned.toLowerCase();
+        const f=drivers.find(d=>d.driver_id===ql||d.name.toLowerCase().includes(ql));
+        if(f){setSelDriver(f);setDSearch(f.driver_id);toast(`Driver: ${f.name}`);}
+        else{toast(`"${cleaned.slice(0,40)}" — driver não identificado`,'error');}
+      }
+      // Also capture AT if present in QR data
+      if(parsed.at){setAtCode(parsed.at);toast(`AT também encontrada: ${parsed.at}`,'info');}
     }
-  },[drivers,toast]);
+  },[drivers,toast,scanMode,parseQRData]);
 
   const fRef=useRef(null);
   const handleImg=useCallback((e)=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onloadend=()=>setImg(r.result);r.readAsDataURL(f);}},[]);
@@ -627,7 +662,7 @@ function App(){
         {tab==='nova'&&(<div className="fade-in"><div className="two">
           <div>
             <div className="card" style={{marginBottom:14}}>
-              <div className="card-h"><h2><MI n="person_search"/>Driver</h2><button className="btn btn-p btn-sm" onClick={()=>setShowScan(true)}><MI n="qr_code_scanner"/>Scanner</button></div>
+              <div className="card-h"><h2><MI n="person_search"/>Driver</h2><div style={{display:'flex',gap:4}}><button className="btn btn-p btn-sm" onClick={()=>{setScanMode('driver');setShowScan('open');}}><MI n="qr_code_scanner"/>ID Driver</button><button className="btn btn-sm" style={{background:'var(--bl)',color:'#fff'}} onClick={()=>{setScanMode('at');setShowScan('open');}}><MI n="receipt_long"/>AT</button></div></div>
               <div className="card-b">
                 <div className="fg"><label className="fl">Buscar Driver</label><div style={{display:'flex',gap:6}}><input className="fi" placeholder="ID, Nome ou Telefone..." value={dSearch} onChange={e=>setDSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')findDriver(dSearch);}}/><button className="btn btn-p" onClick={()=>findDriver(dSearch)}><MI n="search"/></button></div>
                   {filtD.length>0&&!selDriver&&(<div style={{background:theme==='dark'?'var(--g100)':'#fff',border:'1px solid var(--g200)',borderRadius:8,marginTop:3,boxShadow:'0 4px 12px rgba(0,0,0,.08)',maxHeight:160,overflowY:'auto'}}>{filtD.map(d=>(<div key={d.driver_id} onClick={()=>{setSelDriver(d);setDSearch(d.driver_id);}} style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid var(--g100)',display:'flex',justifyContent:'space-between',alignItems:'center'}} onMouseOver={e=>e.currentTarget.style.background='var(--o50)'} onMouseOut={e=>e.currentTarget.style.background=theme==='dark'?'var(--g100)':'#fff'}><div><div style={{fontWeight:600,fontSize:12}}>{d.name}</div><div style={{fontSize:10,color:'var(--g500)'}}>ID: {d.driver_id} • {d.hub}</div></div><span className="bd bd-o">W{d.wave}</span></div>))}</div>)}
@@ -665,7 +700,7 @@ function App(){
         {/* === LOG AT === */}
         {tab==='log'&&(<div className="fade-in">
           <div className="card" style={{marginBottom:14}}>
-            <div className="card-h"><h2><MI n="terminal"/>Log de ATs</h2><button className="btn btn-sm btn-o" onClick={()=>setShowScan(true)}><MI n="qr_code_scanner"/>Scan</button></div>
+            <div className="card-h"><h2><MI n="terminal"/>Log de ATs</h2><button className="btn btn-sm" style={{background:'var(--bl)',color:'#fff'}} onClick={()=>{setScanMode('at');setShowScan('open');}}><MI n="receipt_long"/>Escanear AT</button></div>
             <div className="card-b"><div className="log">{AT_LOGS.map((l,i)=>(<div key={i} className="log-l"><span className="log-t">[{l.time}]</span><span className="log-at">{l.at}</span><span style={{color:'#555'}}>→</span><span style={{color:'#F0ABFC'}}>{l.driver}</span><span style={{color:'#555'}}>|</span><span className="log-q" style={{color:l.qty>100||l.qty<30?'#EF4444':'#22C55E'}}>{l.qty}pkgs</span><span className="log-s">{l.st}</span></div>))}</div></div>
           </div>
           <div className="card"><div className="card-h"><h2><MI n="flash_on"/>Alertas</h2></div><div className="card-b"><div style={{display:'flex',flexDirection:'column',gap:8}}>{AT_LOGS.filter(l=>l.qty>100||l.qty<30).map((l,i)=>(<div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:12,background:l.qty>100?'var(--rd1)':'var(--yl1)',borderRadius:8,flexWrap:'wrap',gap:6}}><div><div style={{fontWeight:700,fontSize:12}}>{l.at} — {l.driver}</div><div style={{fontSize:11,color:'var(--g600)',marginTop:2}}>{l.qty>100?`🔴 ${l.qty}pkgs EXCESSO`:`🟡 ${l.qty}pkgs POUCOS`}</div></div><button className="btn btn-p btn-sm" onClick={()=>{setTab('nova');setAtCode(l.at);setQtd(String(l.qty));const nm=l.driver.split(' ')[0].toLowerCase();const fd=drivers.find(d=>d.name.toLowerCase().includes(nm));if(fd){setSelDriver(fd);setDSearch(fd.driver_id);}l.qty>100?setOcType('Excesso de pacotes (>100)'):setOcType('Poucos pacotes (<30)');}}><MI n="add"/>Abrir</button></div>))}</div></div></div>
@@ -727,7 +762,7 @@ function App(){
           </div>
         </div>)}
       </main>
-      {showScan&&<QRScanner onScan={handleScan} onClose={()=>setShowScan(false)}/>}
+      {showScan&&<QRScanner onScan={handleScan} onClose={()=>setShowScan('')} mode={scanMode}/>}
     </div>
   );
 }
