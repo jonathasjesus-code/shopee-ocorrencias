@@ -252,7 +252,7 @@ const SecureStorage={
 
 // === CONFIG ===
 const ALLOWED_DOMAINS=['shopee.com','shopeemobile-external.com'];
-const GOOGLE_CLIENT_ID='810891479912-5v0391ia5104a1hlmc5cvqrtidt72uor.apps.googleusercontent.com;
+const GOOGLE_CLIENT_ID='810891479912-5v0391ia5104a1hlmc5cvqrtidt72uor.apps.googleusercontent.com';
 
 const MOTIVOS=['Dobradinha','Alocado','Nuvem','Volumoso','Driver não quis misturar','Poucos pacotes','Pacote sem etiqueta','Pacote danificado','Rota divergente','Veículo incompatível','Baú pequeno','Excesso de peso','Endereço incorreto','Problema mecânico','No Show','Atraso','Outro'];
 const OC_TYPES=['Excesso de pacotes (>100)','Poucos pacotes (<30)','No Show','Recusa de carga','Veículo inadequado','Baú insuficiente','Problema no carregamento','Outro'];
@@ -290,13 +290,67 @@ function Toast({toasts}){return<div className="toast-c">{toasts.map(t=><div key=
 
 // === SCANNER ===
 function QRScanner({onScan,onClose}){
-  const[scanning,setScanning]=useState(false);const[mi,setMi]=useState('');const sRef=useRef(null);const hRef=useRef(null);
-  useEffect(()=>()=>{if(hRef.current)hRef.current.stop().catch(()=>{});},[]);
-  const start=useCallback(()=>{setScanning(true);setTimeout(()=>{if(sRef.current&&window.Html5Qrcode){const s=new Html5Qrcode("qr-el");hRef.current=s;s.start({facingMode:"environment"},{fps:10,qrbox:{width:200,height:200}},(t)=>{s.stop().catch(()=>{});setScanning(false);onScan(t);},()=>{}).catch(()=>setScanning(false));}},300);},[onScan]);
-  const stop=useCallback(()=>{if(hRef.current)hRef.current.stop().catch(()=>{});setScanning(false);},[]);
-  return(<div className="modal-ov" onClick={e=>{if(e.target===e.currentTarget){stop();onClose();}}}>
-    <div className="modal"><div className="modal-h"><h3><MI n="qr_code_scanner" s={{color:'var(--sh)'}}/>Scanner</h3><button className="modal-x" onClick={()=>{stop();onClose();}}><MI n="close"/></button></div>
-    <div className="modal-b">{!scanning?(<div style={{textAlign:'center'}}><button className="btn btn-p btn-lg" onClick={start} style={{marginBottom:18}}><MI n="camera_alt"/>Abrir Câmera</button><div className="sdiv"><span>ou digite</span></div><div style={{display:'flex',gap:6,marginTop:10}}><input className="fi" placeholder="Driver ID / AT..." value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&mi.trim())onScan(mi.trim());}} autoFocus/><button className="btn btn-p" onClick={()=>{if(mi.trim())onScan(mi.trim());}}><MI n="search"/></button></div></div>):(<div><div id="qr-el" ref={sRef} style={{borderRadius:10,overflow:'hidden'}}></div><button className="btn btn-s" onClick={stop} style={{width:'100%',marginTop:8}}><MI n="close"/>Fechar</button></div>)}</div></div></div>);
+  const[scanning,setScanning]=useState(false);const[mi,setMi]=useState('');const[scanResult,setScanResult]=useState('');
+  const hRef=useRef(null);const mountedRef=useRef(true);
+
+  useEffect(()=>{mountedRef.current=true;return()=>{mountedRef.current=false;if(hRef.current){try{hRef.current.stop().then(()=>{try{hRef.current.clear();}catch(e){}}).catch(()=>{try{hRef.current.clear();}catch(e){}});}catch(e){}};};},[]);
+
+  const start=useCallback(()=>{
+    setScanning(true);
+    // Give DOM time to render the container
+    setTimeout(()=>{
+      const el=document.getElementById('qr-scanner-region');
+      if(!el||!window.Html5Qrcode){setScanning(false);return;}
+      try{
+        const scanner=new Html5Qrcode("qr-scanner-region");
+        hRef.current=scanner;
+        scanner.start(
+          {facingMode:"environment"},
+          {fps:10,qrbox:{width:220,height:220},aspectRatio:1.0},
+          (decodedText)=>{
+            // Stop scanner first, then process result
+            scanner.stop().then(()=>{try{scanner.clear();}catch(e){}}).catch(()=>{});
+            hRef.current=null;
+            if(mountedRef.current){
+              setScanning(false);
+              setScanResult(decodedText);
+            }
+          },
+          (errorMessage)=>{/* ignore scan errors */}
+        ).catch((err)=>{
+          console.warn('Scanner start failed:',err);
+          if(mountedRef.current)setScanning(false);
+        });
+      }catch(e){
+        console.warn('Scanner init failed:',e);
+        if(mountedRef.current)setScanning(false);
+      }
+    },500);
+  },[]);
+
+  const stop=useCallback(()=>{
+    if(hRef.current){
+      try{hRef.current.stop().then(()=>{try{hRef.current.clear();}catch(e){}}).catch(()=>{try{hRef.current.clear();}catch(e){}});}catch(e){}
+      hRef.current=null;
+    }
+    setScanning(false);
+  },[]);
+
+  const handleSubmit=useCallback((val)=>{
+    if(!val||!val.trim())return;
+    stop();
+    // Use setTimeout to ensure scanner cleanup before parent state change
+    setTimeout(()=>onScan(val.trim()),100);
+  },[onScan,stop]);
+
+  // Auto-submit scan result
+  useEffect(()=>{if(scanResult){handleSubmit(scanResult);setScanResult('');}},[scanResult,handleSubmit]);
+
+  const handleClose=useCallback(()=>{stop();setTimeout(()=>onClose(),100);},[stop,onClose]);
+
+  return(<div className="modal-ov" onClick={e=>{if(e.target===e.currentTarget)handleClose();}}>
+    <div className="modal"><div className="modal-h"><h3><MI n="qr_code_scanner" s={{color:'var(--sh)'}}/>Scanner</h3><button className="modal-x" onClick={handleClose}><MI n="close"/></button></div>
+    <div className="modal-b">{!scanning?(<div style={{textAlign:'center'}}><button className="btn btn-p btn-lg" onClick={start} style={{marginBottom:18}}><MI n="camera_alt"/>Abrir Câmera</button><div className="sdiv"><span>ou digite</span></div><div style={{display:'flex',gap:6,marginTop:10}}><input className="fi" placeholder="Driver ID / AT..." value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&mi.trim())handleSubmit(mi);}} autoFocus/><button className="btn btn-p" onClick={()=>handleSubmit(mi)}><MI n="search"/></button></div></div>):(<div><div id="qr-scanner-region" style={{width:'100%',minHeight:280,borderRadius:10,overflow:'hidden'}}></div><button className="btn btn-s" onClick={stop} style={{width:'100%',marginTop:8}}><MI n="close"/>Fechar câmera</button></div>)}</div></div></div>);
 }
 
 // === DRIVER CARD ===
@@ -456,7 +510,26 @@ function App(){
     else toast(`"${q}" não encontrado`,'error');
   },[drivers,toast]);
 
-  const handleScan=useCallback((code)=>{setShowScan(false);const m=code.match(/\d{4,}/);if(m){setDSearch(m[0]);findDriver(m[0]);}else{setAtCode(code);toast(`Código: ${code}`,'info');}},[findDriver,toast]);
+  const handleScan=useCallback((code)=>{
+    setShowScan(false);
+    if(!code)return;
+    const cleaned=code.trim();
+    // Try to match a driver ID (numeric 4+ digits)
+    const driverIdMatch=cleaned.match(/\d{4,}/);
+    if(driverIdMatch){
+      const did=driverIdMatch[0];
+      setDSearch(did);
+      // Search driver
+      const ql=did.toLowerCase();
+      const f=drivers.find(d=>d.driver_id===ql||d.name.toLowerCase().includes(ql));
+      if(f){setSelDriver(f);setDSearch(f.driver_id);toast(`Driver encontrado: ${f.name}`);}
+      else{toast(`Código escaneado: ${did} (driver não encontrado na base)`,'info');}
+    } else {
+      // Treat as AT code
+      setAtCode(cleaned);
+      toast(`AT escaneado: ${cleaned}`,'info');
+    }
+  },[drivers,toast]);
 
   const fRef=useRef(null);
   const handleImg=useCallback((e)=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onloadend=()=>setImg(r.result);r.readAsDataURL(f);}},[]);
