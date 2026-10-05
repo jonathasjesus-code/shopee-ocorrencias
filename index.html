@@ -309,33 +309,86 @@ function DriverCard({driver}){
     {cls.length>0&&<div style={{marginTop:8}}><div className="di-dl" style={{marginBottom:3}}>Clusters</div><div>{cls.map((c,i)=><span key={i} className="cl-tag">{c}</span>)}</div></div>}</div>);
 }
 
+// === GOOGLE AUTH UTILS ===
+function decodeJwtPayload(token){
+  try{const base64=token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+  return JSON.parse(decodeURIComponent(atob(base64).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')));}
+  catch(e){return null;}
+}
+
 // === LOGIN SCREEN ===
 function LoginScreen({onLogin}){
   const[loading,setLoading]=useState(false);const[error,setError]=useState('');
-  const handleGoogleLogin=()=>{
-    // Simulated login for demo - in production use Google Identity Services
-    setLoading(true);setError('');
-    // Demo: allow any @shopee.com or @shopeemobile-external.com
-    setTimeout(()=>{
-      const demoUser={email:'jonathas.jesus@shopee.com',name:'Jonathas Jesus',picture:null};
-      onLogin(demoUser);
-    },1200);
-  };
+  const gBtnRef=useRef(null);const initRef=useRef(false);
+
+  // Initialize Google Identity Services
+  useEffect(()=>{
+    if(initRef.current)return;
+    const initGIS=()=>{
+      if(!window.google?.accounts?.id)return;
+      initRef.current=true;
+      window.google.accounts.id.initialize({
+        client_id:GOOGLE_CLIENT_ID,
+        callback:(response)=>{
+          setLoading(true);setError('');
+          const payload=decodeJwtPayload(response.credential);
+          if(!payload||!payload.email){setError('Erro ao decodificar credencial');setLoading(false);return;}
+          const domain=payload.email.split('@')[1];
+          if(!ALLOWED_DOMAINS.includes(domain)){
+            setError(`Acesso negado: @${domain} não autorizado. Apenas @shopee.com e @shopeemobile-external.com.`);
+            setLoading(false);
+            window.google.accounts.id.disableAutoSelect();
+            return;
+          }
+          const userData={email:payload.email,name:payload.name||payload.email.split('@')[0],picture:payload.picture||null,token:response.credential};
+          onLogin(userData);
+        },
+        auto_select:false,
+        cancel_on_tap_outside:true,
+      });
+      // Render the Google button
+      if(gBtnRef.current){
+        window.google.accounts.id.renderButton(gBtnRef.current,{
+          type:'standard',theme:'outline',size:'large',width:320,
+          text:'signin_with',shape:'rectangular',logo_alignment:'left',locale:'pt-BR'
+        });
+      }
+    };
+    // Wait for GSI library to load
+    if(window.google?.accounts?.id){initGIS();}
+    else{const iv=setInterval(()=>{if(window.google?.accounts?.id){clearInterval(iv);initGIS();}},200);setTimeout(()=>clearInterval(iv),10000);}
+  },[onLogin]);
+
+  const isClientIdConfigured=GOOGLE_CLIENT_ID&&!GOOGLE_CLIENT_ID.includes('YOUR_GOOGLE');
+
   return(
     <div className="login-screen">
       <div className="login-card">
         <div className="login-logo">S</div>
         <div className="login-title">Sistema de Ocorrências</div>
         <div className="login-sub">Shopee Express — Gestão de Pacotes</div>
-        <button className="g-btn" onClick={handleGoogleLogin} disabled={loading}>
-          {loading?<div className="spinner"/>:<>
-            <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-            Entrar com Google
-          </>}
-        </button>
-        {error&&<div style={{marginTop:12,color:'var(--rd)',fontSize:12,fontWeight:600}}>{error}</div>}
+
+        {isClientIdConfigured?(
+          <div style={{marginBottom:16}}>
+            <div ref={gBtnRef} style={{display:'flex',justifyContent:'center',minHeight:44}}></div>
+            {loading&&<div style={{display:'flex',justifyContent:'center',marginTop:12}}><div className="spinner"/></div>}
+          </div>
+        ):(
+          <div style={{background:'var(--yl1)',padding:14,borderRadius:8,marginBottom:16,fontSize:12,color:'#92400E',lineHeight:1.6}}>
+            <div style={{fontWeight:700,marginBottom:4}}>⚠️ OAuth não configurado</div>
+            <div>Para ativar o login real com Google:</div>
+            <ol style={{paddingLeft:18,marginTop:6}}>
+              <li>Acesse console.cloud.google.com</li>
+              <li>Crie um OAuth Client ID (tipo Web)</li>
+              <li>Adicione a URL do site como "Authorized origin"</li>
+              <li>Substitua <code>GOOGLE_CLIENT_ID</code> no código</li>
+            </ol>
+          </div>
+        )}
+
+        {error&&<div style={{marginTop:8,padding:10,background:'var(--rd1)',color:'#991B1B',fontSize:12,fontWeight:600,borderRadius:8,lineHeight:1.5}}><MI n="block" s={{fontSize:14,verticalAlign:'middle',marginRight:4}}/>{error}</div>}
         <div className="login-domains">
-          <div style={{marginBottom:6}}><MI n="lock" s={{fontSize:14,color:'var(--gn)',verticalAlign:'middle'}}/> Acesso restrito</div>
+          <div style={{marginBottom:6}}><MI n="verified_user" s={{fontSize:14,color:'var(--gn)',verticalAlign:'middle'}}/> Acesso restrito</div>
           <b>@shopee.com</b><br/><b>@shopeemobile-external.com</b>
         </div>
       </div>
@@ -365,7 +418,12 @@ function App(){
   // Load encrypted data
   useEffect(()=>{(async()=>{
     const savedUser=await SecureStorage.load('_user');
-    if(savedUser){setUser(savedUser);}
+    if(savedUser&&savedUser.email){
+      // Re-validate domain on session restore
+      const domain=savedUser.email.split('@')[1];
+      if(ALLOWED_DOMAINS.includes(domain)){setUser(savedUser);}
+      else{SecureStorage.remove('_user');}
+    }
     setAuthLoading(false);
     const savedOcs=await SecureStorage.load('_ocs');
     if(savedOcs){setOcs(savedOcs);}else{
@@ -383,12 +441,13 @@ function App(){
   const toast=useCallback((msg,type='success')=>{const id=Date.now();setToasts(p=>[...p,{id,message:msg,type}]);setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),4000);},[]);
 
   const handleLogin=useCallback(async(userData)=>{
+    if(!userData||!userData.email){toast('Dados de login inválidos','error');return;}
     const domain=userData.email.split('@')[1];
-    if(!ALLOWED_DOMAINS.includes(domain)){toast(`Domínio @${domain} não autorizado`,'error');return;}
+    if(!ALLOWED_DOMAINS.includes(domain)){toast(`Acesso negado: @${domain} não autorizado`,'error');if(window.google?.accounts?.id)window.google.accounts.id.disableAutoSelect();return;}
     setUser(userData);await SecureStorage.save('_user',userData);toast(`Bem-vindo, ${userData.name}!`,'success');
   },[toast]);
 
-  const handleLogout=useCallback(async()=>{setUser(null);SecureStorage.remove('_user');toast('Sessão encerrada','info');},[toast]);
+  const handleLogout=useCallback(async()=>{setUser(null);SecureStorage.remove('_user');if(window.google?.accounts?.id)window.google.accounts.id.disableAutoSelect();toast('Sessão encerrada','info');},[toast]);
 
   const findDriver=useCallback((q)=>{
     const ql=q.toLowerCase().trim();if(!ql){toast('Digite um ID ou nome','error');return;}
