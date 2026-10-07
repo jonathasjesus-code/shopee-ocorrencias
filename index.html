@@ -206,6 +206,30 @@ tr:hover td{background:var(--o50)}
   .login-card{padding:28px 20px}.login-logo{width:56px;height:56px;font-size:28px;border-radius:16px;margin-bottom:16px}
   .login-title{font-size:18px}.login-sub{font-size:12px;margin-bottom:20px}
 }
+
+.admin-gear{background:rgba(255,255,255,.15);border:0;color:#fff;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.2s;font-size:18px}
+.admin-gear:hover{background:rgba(255,255,255,.25);transform:rotate(30deg)}
+.admin-panel{max-width:900px;margin:0 auto}
+.user-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--g100);flex-wrap:wrap}
+.user-row:hover{background:var(--o50)}
+.user-email{font-size:12px;font-weight:600;color:var(--g800);min-width:180px}
+.user-hub{font-size:11px;color:var(--g500)}
+.hub-select{padding:4px 24px 4px 8px;border:1px solid var(--g200);border-radius:6px;font-size:10px;font-family:inherit;background:#fff;min-width:80px}
+.role-badge{padding:3px 8px;border-radius:10px;font-size:9px;font-weight:700;cursor:pointer;border:0;font-family:inherit;transition:.2s}
+.role-badge.admin{background:var(--sh);color:#fff}
+.role-badge.analyst{background:var(--g100);color:var(--g600)}
+.role-badge:hover{opacity:.8}
+.scan-info{background:linear-gradient(135deg,var(--o50),#fff);border:2px solid var(--o200);border-radius:var(--r);padding:14px;margin-bottom:14px;animation:slideUp .3s ease-out}
+.scan-info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-top:8px}
+.scan-info-item{background:#fff;padding:8px;border-radius:6px;border:1px solid var(--g100)}
+.scan-info-label{font-size:9px;font-weight:700;color:var(--g400);text-transform:uppercase;letter-spacing:.4px}
+.scan-info-val{font-size:13px;font-weight:700;color:var(--g800);margin-top:2px}
+.analyst-select{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.analyst-chip{padding:6px 12px;border:2px solid var(--g200);border-radius:16px;font-size:11px;font-weight:500;cursor:pointer;background:#fff;color:var(--g600);font-family:inherit;transition:.2s;display:flex;align-items:center;gap:4px}
+.analyst-chip:hover{border-color:var(--o300)}
+.analyst-chip.sel{border-color:var(--sh);background:var(--sh);color:#fff}
+.analyst-chip .mi{font-size:14px}
+@media(max-width:768px){.user-row{gap:6px;padding:8px 10px}.user-email{min-width:auto;font-size:11px}}
 </style>
 </head>
 <body>
@@ -230,34 +254,25 @@ const CryptoUtils={
     localStorage.setItem('_ek',btoa(String.fromCharCode(...new Uint8Array(exported))));
     return key;
   },
-  async encrypt(data){
-    const key=await this.getKey();const iv=crypto.getRandomValues(new Uint8Array(12));
-    const enc=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(data)));
-    return btoa(String.fromCharCode(...iv,...new Uint8Array(enc)));
-  },
-  async decrypt(ciphertext){
-    try{const key=await this.getKey();const raw=Uint8Array.from(atob(ciphertext),c=>c.charCodeAt(0));
-    const iv=raw.slice(0,12);const data=raw.slice(12);
-    const dec=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,data);
-    return JSON.parse(new TextDecoder().decode(dec));}catch(e){return null;}
-  }
+  async encrypt(data){const key=await this.getKey();const iv=crypto.getRandomValues(new Uint8Array(12));const enc=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(data)));return btoa(String.fromCharCode(...iv,...new Uint8Array(enc)));},
+  async decrypt(ct){try{const key=await this.getKey();const raw=Uint8Array.from(atob(ct),c=>c.charCodeAt(0));const iv=raw.slice(0,12);const data=raw.slice(12);const dec=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,data);return JSON.parse(new TextDecoder().decode(dec));}catch(e){return null;}}
 };
-
-// === STORAGE with encryption ===
-const SecureStorage={
-  async save(key,data){const enc=await CryptoUtils.encrypt(data);localStorage.setItem(key,enc);},
-  async load(key){const enc=localStorage.getItem(key);if(!enc)return null;return CryptoUtils.decrypt(enc);},
-  remove(key){localStorage.removeItem(key);}
+const SS={
+  async save(k,d){const enc=await CryptoUtils.encrypt(d);localStorage.setItem(k,enc);},
+  async load(k){const enc=localStorage.getItem(k);if(!enc)return null;return CryptoUtils.decrypt(enc);},
+  remove(k){localStorage.removeItem(k);}
 };
 
 // === CONFIG ===
 const ALLOWED_DOMAINS=['shopee.com','shopeemobile-external.com'];
 const GOOGLE_CLIENT_ID='810891479912-5v0391ia5104a1hlmc5cvqrtidt72uor.apps.googleusercontent.com';
-
+const HUBS=['VG','GRU','LAPA','MOOCA'];
 const MOTIVOS=['Dobradinha','Alocado','Nuvem','Volumoso','Driver não quis misturar','Poucos pacotes','Pacote sem etiqueta','Pacote danificado','Rota divergente','Veículo incompatível','Baú pequeno','Excesso de peso','Endereço incorreto','Problema mecânico','No Show','Atraso','Outro'];
 const OC_TYPES=['Excesso de pacotes (>100)','Poucos pacotes (<30)','No Show','Recusa de carga','Veículo inadequado','Baú insuficiente','Problema no carregamento','Outro'];
 const PROFILES=[{id:'MOTO',icon:'🏍️',name:'Moto',desc:'Motocicleta com baú'},{id:'PASSEIO',icon:'🚗',name:'Passeio',desc:'Carro de passeio'},{id:'FIORINO',icon:'🚐',name:'Fiorino',desc:'Fiorino / Van'}];
 const BAUS=[{id:'bau-80',name:'Baú 80L',desc:'80L Pro Tork',capacity:'~25-30 pkgs'},{id:'bau-126',name:'Baú 126L',desc:'126L MN3',capacity:'~40-50 pkgs'},{id:'bau-modelo3',name:'Baú Grande',desc:'Expandido',capacity:'~60-80 pkgs'}];
+// Default admin
+const DEFAULT_ADMIN='jonathas.jesus@shopee.com';
 
 const DEMO_DRIVERS=[
   {driver_id:'2383524',name:'ANDRE REIS DE MACEDO',phone:'11942148087',hub:'VG',cluster:"['J-1','J-11','J-2','J-3','J-4','J-5','J-6','J-7']",wave:'1',alocado:'Não',data:'2026-10-02 20:54'},
@@ -270,8 +285,8 @@ const DEMO_DRIVERS=[
   {driver_id:'1916760',name:'ANTONIO MARCOS CELESTINO JUNIOR',phone:'11976791496',hub:'VG',cluster:"['N-10','P-14','P-7','Q-12','Q-13']",wave:'1',alocado:'Não',data:'2026-10-04 20:54'},
   {driver_id:'210847',name:'CESAR FERNANDES DE ANDRADE',phone:'11967415814',hub:'VG',cluster:"['T-10','T-14','T-4','U-11','U-12','U-13']",wave:'1',alocado:'Não',data:'2026-10-04 20:54'},
   {driver_id:'1966040',name:'JEAN LUCAS CRUZ DOS SANTOS',phone:'11999887766',hub:'GRU',cluster:"['I-10','J-12','J-13','K-5','K-7']",wave:'2',alocado:'Sim',data:'2026-10-04 20:54'},
+  {driver_id:'654347',name:'REBECA SANTOS DE SOUZA',phone:'11988776655',hub:'GRU',cluster:"['G-3','G-5','G-8']",wave:'1',alocado:'Sim',data:'2026-10-07 14:00'},
 ];
-
 const AT_LOGS=[
   {time:'06:15',at:'AT-VG-20261005-001',driver:'ANDRE REIS',qty:45,st:'Carregado'},
   {time:'06:22',at:'AT-VG-20261005-002',driver:'CAIQUE PONTES',qty:112,st:'⚠️ Excesso'},
@@ -282,10 +297,7 @@ const AT_LOGS=[
   {time:'07:10',at:'AT-VG-20261005-007',driver:'FERNANDO FERNANDES',qty:18,st:'⚠️ Poucos'},
 ];
 
-// Helper
 const MI=({n,s})=><span className="material-icons-round mi" style={s}>{n}</span>;
-
-// === TOAST ===
 function Toast({toasts}){return<div className="toast-c">{toasts.map(t=><div key={t.id} className={`toast ${t.type==='success'?'suc':t.type==='error'?'err':'inf'}`}><MI n={t.type==='success'?'check_circle':t.type==='error'?'error':'info'} s={{color:t.type==='success'?'var(--gn)':t.type==='error'?'var(--rd)':'var(--bl)',fontSize:18}}/><span className="toast-m">{t.message}</span></div>)}</div>;}
 
 // === SCANNER ===
@@ -294,154 +306,116 @@ function QRScanner({onScan,onClose,mode}){
   const hRef=useRef(null);const mountedRef=useRef(true);
   const isAT=mode==='at';
   const modeLabel=isAT?'AT (Log)':'Driver ID';
-  const modeIcon=isAT?'receipt_long':'person_search';
   const modeColor=isAT?'var(--bl)':'var(--sh)';
-  const modePlaceholder=isAT?'Ex: AT20260903994EM':'Ex: 2405676';
-
   useEffect(()=>{mountedRef.current=true;return()=>{mountedRef.current=false;if(hRef.current){try{hRef.current.stop().then(()=>{try{hRef.current.clear();}catch(e){}}).catch(()=>{try{hRef.current.clear();}catch(e){}});}catch(e){}};};},[]);
-
-  const start=useCallback(()=>{
-    setScanning(true);
-    setTimeout(()=>{
-      const el=document.getElementById('qr-scanner-region');
-      if(!el||!window.Html5Qrcode){setScanning(false);return;}
-      try{
-        const scanner=new Html5Qrcode("qr-scanner-region");
-        hRef.current=scanner;
-        scanner.start(
-          {facingMode:"environment"},
-          {fps:10,qrbox:{width:220,height:220},aspectRatio:1.0},
-          (decodedText)=>{
-            scanner.stop().then(()=>{try{scanner.clear();}catch(e){}}).catch(()=>{});
-            hRef.current=null;
-            if(mountedRef.current){setScanning(false);setScanResult(decodedText);}
-          },
-          ()=>{}
-        ).catch((err)=>{console.warn('Scanner err:',err);if(mountedRef.current)setScanning(false);});
-      }catch(e){console.warn('Scanner init err:',e);if(mountedRef.current)setScanning(false);}
-    },500);
-  },[]);
-
-  const stop=useCallback(()=>{
-    if(hRef.current){try{hRef.current.stop().then(()=>{try{hRef.current.clear();}catch(e){}}).catch(()=>{try{hRef.current.clear();}catch(e){}});}catch(e){}hRef.current=null;}
-    setScanning(false);
-  },[]);
-
-  const handleSubmit=useCallback((val)=>{
-    if(!val||!val.trim())return;stop();
-    setTimeout(()=>onScan(val.trim()),100);
-  },[onScan,stop]);
-
+  const start=useCallback(()=>{setScanning(true);setTimeout(()=>{const el=document.getElementById('qr-scanner-region');if(!el||!window.Html5Qrcode){setScanning(false);return;}try{const scanner=new Html5Qrcode("qr-scanner-region");hRef.current=scanner;scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:220,height:220},aspectRatio:1.0},(t)=>{scanner.stop().then(()=>{try{scanner.clear();}catch(e){}}).catch(()=>{});hRef.current=null;if(mountedRef.current){setScanning(false);setScanResult(t);}},()=>{}).catch((e)=>{if(mountedRef.current)setScanning(false);});}catch(e){if(mountedRef.current)setScanning(false);}},500);},[]);
+  const stop=useCallback(()=>{if(hRef.current){try{hRef.current.stop().then(()=>{try{hRef.current.clear();}catch(e){}}).catch(()=>{try{hRef.current.clear();}catch(e){}});}catch(e){}hRef.current=null;}setScanning(false);},[]);
+  const handleSubmit=useCallback((val)=>{if(!val||!val.trim())return;stop();setTimeout(()=>onScan(val.trim()),100);},[onScan,stop]);
   useEffect(()=>{if(scanResult){handleSubmit(scanResult);setScanResult('');}},[scanResult,handleSubmit]);
   const handleClose=useCallback(()=>{stop();setTimeout(()=>onClose(),100);},[stop,onClose]);
-
   return(<div className="modal-ov" onClick={e=>{if(e.target===e.currentTarget)handleClose();}}>
-    <div className="modal"><div className="modal-h"><h3><MI n={modeIcon} s={{color:modeColor}}/>Scanner — {modeLabel}</h3><button className="modal-x" onClick={handleClose}><MI n="close"/></button></div>
+    <div className="modal"><div className="modal-h"><h3><MI n={isAT?'receipt_long':'person_search'} s={{color:modeColor}}/>Scanner — {modeLabel}</h3><button className="modal-x" onClick={handleClose}><MI n="close"/></button></div>
     <div className="modal-b">
       <div style={{background:isAT?'var(--bl1)':'var(--o50)',padding:'8px 12px',borderRadius:8,marginBottom:14,fontSize:11,fontWeight:600,color:isAT?'#1E40AF':'var(--o700)',display:'flex',alignItems:'center',gap:6}}>
         <MI n={isAT?'receipt_long':'badge'} s={{fontSize:16}}/>
-        {isAT?'Escaneie o QR Code do LOG para capturar a AT completa (ex: AT20260903994EM)':'Escaneie o QR Code do crachá para capturar o Driver ID'}
+        {isAT?'Escaneie o QR Code do LOG → captura AT + qtd pacotes':'Escaneie o código de barras do driver → captura ID, nome, veículo, placa'}
       </div>
-      {!scanning?(<div style={{textAlign:'center'}}><button className="btn btn-p btn-lg" onClick={start} style={{marginBottom:18,background:isAT?'linear-gradient(135deg,var(--bl),#1E40AF)':undefined}}><MI n="camera_alt"/>Abrir Câmera</button><div className="sdiv"><span>ou digite</span></div><div style={{display:'flex',gap:6,marginTop:10}}><input className="fi" placeholder={modePlaceholder} value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&mi.trim())handleSubmit(mi);}} autoFocus/><button className="btn btn-p" onClick={()=>handleSubmit(mi)} style={{background:isAT?'var(--bl)':undefined}}><MI n="search"/></button></div></div>):(<div><div id="qr-scanner-region" style={{width:'100%',minHeight:280,borderRadius:10,overflow:'hidden'}}></div><button className="btn btn-s" onClick={stop} style={{width:'100%',marginTop:8}}><MI n="close"/>Fechar câmera</button></div>)}
+      {!scanning?(<div style={{textAlign:'center'}}><button className="btn btn-p btn-lg" onClick={start} style={{marginBottom:18,background:isAT?'linear-gradient(135deg,var(--bl),#1E40AF)':undefined}}><MI n="camera_alt"/>Abrir Câmera</button><div className="sdiv"><span>ou digite</span></div><div style={{display:'flex',gap:6,marginTop:10}}><input className="fi" placeholder={isAT?'Ex: AT20260903994EM':'Ex: 654347'} value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&mi.trim())handleSubmit(mi);}} autoFocus/><button className="btn btn-p" onClick={()=>handleSubmit(mi)} style={{background:isAT?'var(--bl)':undefined}}><MI n="search"/></button></div></div>):(<div><div id="qr-scanner-region" style={{width:'100%',minHeight:280,borderRadius:10,overflow:'hidden'}}></div><button className="btn btn-s" onClick={stop} style={{width:'100%',marginTop:8}}><MI n="close"/>Fechar câmera</button></div>)}
     </div></div></div>);
 }
+
 // === DRIVER CARD ===
-function DriverCard({driver}){
-  if(!driver)return null;
-  const cls=driver.cluster?driver.cluster.replace(/[\[\]']/g,'').split(',').map(c=>c.trim()).filter(Boolean):[];
-  const ini=driver.name?driver.name.split(' ').slice(0,2).map(w=>w[0]).join(''):'??';
-  return(<div className="di"><div className="di-h"><div className="di-av">{ini}</div><div style={{minWidth:0}}><div className="di-nm" style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{driver.name}</div><div className="di-id">ID: {driver.driver_id} {driver.phone?`• 📱 ${driver.phone}`:''}</div></div></div>
-    <div className="di-ds"><div className="di-d"><div className="di-dl">HUB</div><div className="di-dv">{driver.hub||'—'}</div></div><div className="di-d"><div className="di-dl">Wave</div><div className="di-dv">{driver.wave||'—'}</div></div><div className="di-d"><div className="di-dl">Alocado</div><div className="di-dv"><span className={`bd ${driver.alocado==='Sim'?'bd-g':'bd-y'}`}>{driver.alocado||'—'}</span></div></div><div className="di-d"><div className="di-dl">Data</div><div className="di-dv" style={{fontSize:10}}>{driver.data||'—'}</div></div></div>
-    {cls.length>0&&<div style={{marginTop:8}}><div className="di-dl" style={{marginBottom:3}}>Clusters</div><div>{cls.map((c,i)=><span key={i} className="cl-tag">{c}</span>)}</div></div>}</div>);
+function DriverCard({driver,scanInfo}){
+  if(!driver&&!scanInfo)return null;
+  const d=driver||{};
+  const cls=d.cluster?d.cluster.replace(/[\[\]']/g,'').split(',').map(c=>c.trim()).filter(Boolean):[];
+  const ini=d.name?d.name.split(' ').slice(0,2).map(w=>w[0]).join(''):'??';
+  return(<div className="di"><div className="di-h"><div className="di-av">{ini}</div><div style={{minWidth:0}}><div className="di-nm" style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.name||scanInfo?.driverName||'—'}</div><div className="di-id">ID: {d.driver_id||scanInfo?.driverId||'—'} {d.phone?`• 📱 ${d.phone}`:''}</div></div></div>
+    <div className="di-ds">
+      <div className="di-d"><div className="di-dl">HUB</div><div className="di-dv">{d.hub||'—'}</div></div>
+      <div className="di-d"><div className="di-dl">Wave</div><div className="di-dv">{d.wave||'—'}</div></div>
+      <div className="di-d"><div className="di-dl">Alocado</div><div className="di-dv"><span className={`bd ${d.alocado==='Sim'?'bd-g':'bd-y'}`}>{d.alocado||'—'}</span></div></div>
+      <div className="di-d"><div className="di-dl">Data</div><div className="di-dv" style={{fontSize:10}}>{d.data||'—'}</div></div>
+      {scanInfo?.vehicleType&&<div className="di-d"><div className="di-dl">Veículo</div><div className="di-dv">{scanInfo.vehicleType}</div></div>}
+      {scanInfo?.plate&&<div className="di-d"><div className="di-dl">Placa</div><div className="di-dv" style={{fontFamily:'monospace'}}>{scanInfo.plate}</div></div>}
+    </div>
+    {cls.length>0&&<div style={{marginTop:8}}><div className="di-dl" style={{marginBottom:3}}>Clusters</div><div>{cls.map((c,i)=><span key={i} className="cl-tag">{c}</span>)}</div></div>}
+  </div>);
 }
 
-// === GOOGLE AUTH UTILS ===
+// === SCANNED INFO CARD (for AT) ===
+function ScanInfoCard({info}){
+  if(!info)return null;
+  return(<div className="scan-info"><div style={{fontWeight:700,fontSize:13,display:'flex',alignItems:'center',gap:6}}><MI n="qr_code" s={{color:'var(--sh)',fontSize:18}}/>Informações Escaneadas</div>
+    <div className="scan-info-grid">
+      {info.at&&<div className="scan-info-item"><div className="scan-info-label">Código AT</div><div className="scan-info-val" style={{fontFamily:'monospace',fontSize:12}}>{info.at}</div></div>}
+      {info.qty!=null&&<div className="scan-info-item"><div className="scan-info-label">Pacotes</div><div className="scan-info-val" style={{color:info.qty>100?'var(--rd)':info.qty<30?'var(--yl)':'var(--gn)'}}>{info.qty}</div></div>}
+      {info.driverName&&<div className="scan-info-item"><div className="scan-info-label">Motorista</div><div className="scan-info-val" style={{fontSize:11}}>{info.driverName}</div></div>}
+      {info.driverId&&<div className="scan-info-item"><div className="scan-info-label">ID Driver</div><div className="scan-info-val">{info.driverId}</div></div>}
+      {info.vehicleType&&<div className="scan-info-item"><div className="scan-info-label">Veículo</div><div className="scan-info-val">{info.vehicleType}</div></div>}
+      {info.plate&&<div className="scan-info-item"><div className="scan-info-label">Placa</div><div className="scan-info-val" style={{fontFamily:'monospace'}}>{info.plate}</div></div>}
+    </div>
+  </div>);
+}
+
+// === GOOGLE AUTH ===
 function decodeJwtPayload(token){
-  try{const base64=token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
-  return JSON.parse(decodeURIComponent(atob(base64).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')));}
-  catch(e){return null;}
+  try{const b=token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');return JSON.parse(decodeURIComponent(atob(b).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')));}catch(e){return null;}
 }
 
-// === LOGIN SCREEN ===
 function LoginScreen({onLogin}){
-  const[loading,setLoading]=useState(false);const[error,setError]=useState('');
-  const gBtnRef=useRef(null);const initRef=useRef(false);
-
-  // Initialize Google Identity Services
-  useEffect(()=>{
-    if(initRef.current)return;
-    const initGIS=()=>{
-      if(!window.google?.accounts?.id)return;
-      initRef.current=true;
-      window.google.accounts.id.initialize({
-        client_id:GOOGLE_CLIENT_ID,
-        callback:(response)=>{
-          setLoading(true);setError('');
-          const payload=decodeJwtPayload(response.credential);
-          if(!payload||!payload.email){setError('Erro ao decodificar credencial');setLoading(false);return;}
-          const domain=payload.email.split('@')[1];
-          if(!ALLOWED_DOMAINS.includes(domain)){
-            setError(`Acesso negado: @${domain} não autorizado. Apenas @shopee.com e @shopeemobile-external.com.`);
-            setLoading(false);
-            window.google.accounts.id.disableAutoSelect();
-            return;
-          }
-          const userData={email:payload.email,name:payload.name||payload.email.split('@')[0],picture:payload.picture||null,token:response.credential};
-          onLogin(userData);
-        },
-        auto_select:false,
-        cancel_on_tap_outside:true,
-      });
-      // Render the Google button
-      if(gBtnRef.current){
-        window.google.accounts.id.renderButton(gBtnRef.current,{
-          type:'standard',theme:'outline',size:'large',width:320,
-          text:'signin_with',shape:'rectangular',logo_alignment:'left',locale:'pt-BR'
-        });
-      }
-    };
-    // Wait for GSI library to load
-    if(window.google?.accounts?.id){initGIS();}
-    else{const iv=setInterval(()=>{if(window.google?.accounts?.id){clearInterval(iv);initGIS();}},200);setTimeout(()=>clearInterval(iv),10000);}
+  const[loading,setLoading]=useState(false);const[error,setError]=useState('');const gRef=useRef(null);const initRef=useRef(false);
+  useEffect(()=>{if(initRef.current)return;const init=()=>{if(!window.google?.accounts?.id)return;initRef.current=true;
+    window.google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:(r)=>{setLoading(true);setError('');const p=decodeJwtPayload(r.credential);if(!p||!p.email){setError('Erro ao decodificar credencial');setLoading(false);return;}const dom=p.email.split('@')[1];if(!ALLOWED_DOMAINS.includes(dom)){setError(`Acesso negado: @${dom} não autorizado.`);setLoading(false);window.google.accounts.id.disableAutoSelect();return;}onLogin({email:p.email,name:p.name||p.email.split('@')[0],picture:p.picture||null,token:r.credential});},auto_select:false});
+    if(gRef.current){window.google.accounts.id.renderButton(gRef.current,{type:'standard',theme:'outline',size:'large',width:320,text:'signin_with',shape:'rectangular',locale:'pt-BR'});}};
+    if(window.google?.accounts?.id){init();}else{const iv=setInterval(()=>{if(window.google?.accounts?.id){clearInterval(iv);init();}},200);setTimeout(()=>clearInterval(iv),10000);}
   },[onLogin]);
+  const configured=GOOGLE_CLIENT_ID&&!GOOGLE_CLIENT_ID.includes('YOUR_GOOGLE');
+  return(<div className="login-screen"><div className="login-card"><div className="login-logo">S</div><div className="login-title">Sistema de Ocorrências</div><div className="login-sub">Shopee Express — Gestão de Pacotes</div>
+    {configured?(<div style={{marginBottom:16}}><div ref={gRef} style={{display:'flex',justifyContent:'center',minHeight:44}}></div>{loading&&<div style={{display:'flex',justifyContent:'center',marginTop:12}}><div className="spinner"/></div>}</div>):(<div style={{background:'var(--yl1)',padding:14,borderRadius:8,marginBottom:16,fontSize:12,color:'#92400E',lineHeight:1.6}}><div style={{fontWeight:700,marginBottom:4}}>⚠️ OAuth não configurado</div><div>Configure o GOOGLE_CLIENT_ID no código.</div></div>)}
+    {error&&<div style={{marginTop:8,padding:10,background:'var(--rd1)',color:'#991B1B',fontSize:12,fontWeight:600,borderRadius:8}}>{error}</div>}
+    <div className="login-domains"><div style={{marginBottom:6}}><MI n="verified_user" s={{fontSize:14,color:'var(--gn)',verticalAlign:'middle'}}/> Acesso restrito</div><b>@shopee.com</b><br/><b>@shopeemobile-external.com</b></div>
+  </div></div>);
+}
 
-  const isClientIdConfigured=GOOGLE_CLIENT_ID&&!GOOGLE_CLIENT_ID.includes('YOUR_GOOGLE');
-
-  return(
-    <div className="login-screen">
-      <div className="login-card">
-        <div className="login-logo">S</div>
-        <div className="login-title">Sistema de Ocorrências</div>
-        <div className="login-sub">Shopee Express — Gestão de Pacotes</div>
-
-        {isClientIdConfigured?(
-          <div style={{marginBottom:16}}>
-            <div ref={gBtnRef} style={{display:'flex',justifyContent:'center',minHeight:44}}></div>
-            {loading&&<div style={{display:'flex',justifyContent:'center',marginTop:12}}><div className="spinner"/></div>}
-          </div>
-        ):(
-          <div style={{background:'var(--yl1)',padding:14,borderRadius:8,marginBottom:16,fontSize:12,color:'#92400E',lineHeight:1.6}}>
-            <div style={{fontWeight:700,marginBottom:4}}>⚠️ OAuth não configurado</div>
-            <div>Para ativar o login real com Google:</div>
-            <ol style={{paddingLeft:18,marginTop:6}}>
-              <li>Acesse console.cloud.google.com</li>
-              <li>Crie um OAuth Client ID (tipo Web)</li>
-              <li>Adicione a URL do site como "Authorized origin"</li>
-              <li>Substitua <code>GOOGLE_CLIENT_ID</code> no código</li>
-            </ol>
-          </div>
-        )}
-
-        {error&&<div style={{marginTop:8,padding:10,background:'var(--rd1)',color:'#991B1B',fontSize:12,fontWeight:600,borderRadius:8,lineHeight:1.5}}><MI n="block" s={{fontSize:14,verticalAlign:'middle',marginRight:4}}/>{error}</div>}
-        <div className="login-domains">
-          <div style={{marginBottom:6}}><MI n="verified_user" s={{fontSize:14,color:'var(--gn)',verticalAlign:'middle'}}/> Acesso restrito</div>
-          <b>@shopee.com</b><br/><b>@shopeemobile-external.com</b>
+// === ADMIN PANEL ===
+function AdminPanel({users,onUpdate,onAdd,onRemove,currentUser}){
+  const[newEmail,setNewEmail]=useState('');const[newHub,setNewHub]=useState('VG');
+  const addUser=()=>{if(!newEmail.includes('@')){return;}onAdd({email:newEmail,name:newEmail.split('@')[0],hub:newHub,role:'analyst',active:true});setNewEmail('');};
+  return(<div className="admin-panel fade-in">
+    <div className="card" style={{marginBottom:16}}>
+      <div className="card-h"><h2><MI n="admin_panel_settings"/>Painel Administrativo</h2></div>
+      <div className="card-b">
+        <h3 style={{fontSize:13,marginBottom:12}}>Adicionar Analista</h3>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          <input className="fi" placeholder="email@shopee.com" value={newEmail} onChange={e=>setNewEmail(e.target.value)} style={{flex:1,minWidth:180}} onKeyDown={e=>{if(e.key==='Enter')addUser();}}/>
+          <select className="fs hub-select" value={newHub} onChange={e=>setNewHub(e.target.value)} style={{width:100}}>{HUBS.map(h=><option key={h}>{h}</option>)}</select>
+          <button className="btn btn-p" onClick={addUser}><MI n="person_add"/>Adicionar</button>
         </div>
       </div>
     </div>
-  );
+    <div className="card">
+      <div className="card-h"><h2><MI n="group"/>Analistas Cadastrados <span className="bd bd-o">{users.length}</span></h2></div>
+      <div style={{padding:0}}>
+        <div style={{padding:'8px 14px',background:'var(--g50)',borderBottom:'2px solid var(--g200)',display:'flex',gap:10,fontSize:10,fontWeight:700,color:'var(--g500)',textTransform:'uppercase'}}>
+          <div style={{flex:1,minWidth:160}}>Email</div><div style={{width:80}}>HUB</div><div style={{width:70}}>Perfil</div><div style={{width:50}}>Status</div><div style={{width:30}}></div>
+        </div>
+        {users.map((u,i)=>(
+          <div key={u.email} className="user-row">
+            <div style={{flex:1,minWidth:160}}>
+              <div className="user-email">{u.name||u.email.split('@')[0]}</div>
+              <div style={{fontSize:10,color:'var(--g400)'}}>{u.email}</div>
+            </div>
+            <select className="fs hub-select" value={u.hub||'VG'} onChange={e=>onUpdate(i,{...u,hub:e.target.value})} style={{width:80}}>{HUBS.map(h=><option key={h}>{h}</option>)}</select>
+            <button className={`role-badge ${u.role==='admin'?'admin':'analyst'}`} onClick={()=>onUpdate(i,{...u,role:u.role==='admin'?'analyst':'admin'})}>{u.role==='admin'?'ADM':'Analista'}</button>
+            <span className={`bd ${u.active!==false?'bd-g':'bd-r'}`} style={{cursor:'pointer',fontSize:8}} onClick={()=>onUpdate(i,{...u,active:!u.active})}>{u.active!==false?'Ativo':'Inativo'}</span>
+            {u.email!==DEFAULT_ADMIN&&<button className="btn btn-sm" style={{padding:2,background:'var(--rd1)',color:'var(--rd)'}} onClick={()=>onRemove(i)}><MI n="close" s={{fontSize:14}}/></button>}
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>);
 }
-
 
 // === MAIN APP ===
 function App(){
@@ -452,117 +426,97 @@ function App(){
   const[profile,setProfile]=useState('');const[selBau,setSelBau]=useState('');const[qtd,setQtd]=useState('');
   const[motivo,setMotivo]=useState('');const[ocType,setOcType]=useState('');const[obs,setObs]=useState('');
   const[atCode,setAtCode]=useState('');const[img,setImg]=useState(null);const[status,setStatus]=useState('Pendente');
-  const[showScan,setShowScan]=useState('');const[scanMode,setScanMode]=useState('driver');const[geo,setGeo]=useState(null);
-  // Filters
+  const[showScan,setShowScan]=useState('');const[scanMode,setScanMode]=useState('driver');
+  const[scanInfo,setScanInfo]=useState(null); // extra info from barcode/QR
+  const[selAnalyst,setSelAnalyst]=useState(''); // analyst who is registering
+  const[geo,setGeo]=useState(null);
   const[fHub,setFHub]=useState('');const[fStatus,setFStatus]=useState('');const[fMotivo,setFMotivo]=useState('');const[fPerfil,setFPerfil]=useState('');const[fSearch,setFSearch]=useState('');
-
   const[ocs,setOcs]=useState([]);const[ocsLoaded,setOcsLoaded]=useState(false);
+  // Admin
+  const[adminUsers,setAdminUsers]=useState([]);const[adminLoaded,setAdminLoaded]=useState(false);
 
-  // Theme
   useEffect(()=>{document.documentElement.setAttribute('data-theme',theme);localStorage.setItem('theme',theme);},[theme]);
-
-  // Load encrypted data
+  
+  // Load data
   useEffect(()=>{(async()=>{
-    const savedUser=await SecureStorage.load('_user');
-    if(savedUser&&savedUser.email){
-      // Re-validate domain on session restore
-      const domain=savedUser.email.split('@')[1];
-      if(ALLOWED_DOMAINS.includes(domain)){setUser(savedUser);}
-      else{SecureStorage.remove('_user');}
-    }
-    setAuthLoading(false);
-    const savedOcs=await SecureStorage.load('_ocs');
-    if(savedOcs){setOcs(savedOcs);}else{
-      setOcs([{id:1,dataHora:'19/08/2026 11:38:25',driverId:'1966040',nome:'JEAN LUCAS CRUZ DOS SANTOS',hub:'GRU',prefs:"['I-10','J-12','J-13','K-5','K-7']",ocorrencia:'No Show',motivo:'Problema mecânico',status:'OK',profile:'MOTO',bau:'Baú 80L',qtd:28,at:'AT-GRU-2026081901',obs:'Driver não apareceu',img:null,operador:'jonathas.jesus@shopee.com',operadorNome:'Jonathas Jesus',lat:null,lng:null}]);
-    }
-    setOcsLoaded(true);
+    const su=await SS.load('_user');if(su&&su.email){const dom=su.email.split('@')[1];if(ALLOWED_DOMAINS.includes(dom))setUser(su);else SS.remove('_user');}setAuthLoading(false);
+    const so=await SS.load('_ocs');setOcs(so||[]);setOcsLoaded(true);
+    const sa=await SS.load('_admin_users');
+    if(sa&&sa.length>0){setAdminUsers(sa);}else{setAdminUsers([{email:DEFAULT_ADMIN,name:'Jonathas Jesus',hub:'GRU',role:'admin',active:true}]);}
+    setAdminLoaded(true);
   })();},[]);
 
-  // Save encrypted
-  useEffect(()=>{if(ocsLoaded)SecureStorage.save('_ocs',ocs);},[ocs,ocsLoaded]);
-
-  // Geolocation
+  useEffect(()=>{if(ocsLoaded)SS.save('_ocs',ocs);},[ocs,ocsLoaded]);
+  useEffect(()=>{if(adminLoaded)SS.save('_admin_users',adminUsers);},[adminUsers,adminLoaded]);
   useEffect(()=>{if(navigator.geolocation){navigator.geolocation.getCurrentPosition(p=>{setGeo({lat:p.coords.latitude,lng:p.coords.longitude});},()=>{},{enableHighAccuracy:false,timeout:10000});}},[]);
 
   const toast=useCallback((msg,type='success')=>{const id=Date.now();setToasts(p=>[...p,{id,message:msg,type}]);setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),4000);},[]);
-
-  const handleLogin=useCallback(async(userData)=>{
-    if(!userData||!userData.email){toast('Dados de login inválidos','error');return;}
-    const domain=userData.email.split('@')[1];
-    if(!ALLOWED_DOMAINS.includes(domain)){toast(`Acesso negado: @${domain} não autorizado`,'error');if(window.google?.accounts?.id)window.google.accounts.id.disableAutoSelect();return;}
-    setUser(userData);await SecureStorage.save('_user',userData);toast(`Bem-vindo, ${userData.name}!`,'success');
+  const handleLogin=useCallback(async(ud)=>{if(!ud||!ud.email){toast('Login inválido','error');return;}const dom=ud.email.split('@')[1];if(!ALLOWED_DOMAINS.includes(dom)){toast(`@${dom} não autorizado`,'error');return;}setUser(ud);await SS.save('_user',ud);
+    // Auto-add to admin list if not present
+    setAdminUsers(prev=>{if(prev.find(u=>u.email===ud.email))return prev;return[...prev,{email:ud.email,name:ud.name,hub:'VG',role:ud.email===DEFAULT_ADMIN?'admin':'analyst',active:true}];});
+    toast(`Bem-vindo, ${ud.name}!`);
   },[toast]);
+  const handleLogout=useCallback(async()=>{setUser(null);SS.remove('_user');if(window.google?.accounts?.id)window.google.accounts.id.disableAutoSelect();toast('Sessão encerrada','info');},[toast]);
 
-  const handleLogout=useCallback(async()=>{setUser(null);SecureStorage.remove('_user');if(window.google?.accounts?.id)window.google.accounts.id.disableAutoSelect();toast('Sessão encerrada','info');},[toast]);
+  // Is current user admin?
+  const isAdmin=useMemo(()=>{if(!user)return false;const u=adminUsers.find(a=>a.email===user.email);return u?.role==='admin'||user.email===DEFAULT_ADMIN;},[user,adminUsers]);
+  // Current user's hub
+  const myHub=useMemo(()=>{if(!user)return'VG';const u=adminUsers.find(a=>a.email===user.email);return u?.hub||'VG';},[user,adminUsers]);
+  // Active analysts for the same hub (for analyst selector)
+  const hubAnalysts=useMemo(()=>adminUsers.filter(a=>a.active!==false&&a.hub===myHub),[adminUsers,myHub]);
 
-  const findDriver=useCallback((q)=>{
-    const ql=q.toLowerCase().trim();if(!ql){toast('Digite um ID ou nome','error');return;}
-    const f=drivers.find(d=>d.driver_id===ql||d.name.toLowerCase().includes(ql)||(d.phone&&d.phone.includes(ql)));
-    if(f){setSelDriver(f);setDSearch(f.driver_id);toast(`Driver: ${f.name}`);}
-    else toast(`"${q}" não encontrado`,'error');
-  },[drivers,toast]);
+  const findDriver=useCallback((q)=>{const ql=q.toLowerCase().trim();if(!ql){toast('Digite um ID ou nome','error');return;}const f=drivers.find(d=>d.driver_id===ql||d.name.toLowerCase().includes(ql)||(d.phone&&d.phone.includes(ql)));if(f){setSelDriver(f);setDSearch(f.driver_id);toast(`Driver: ${f.name}`);}else toast(`"${q}" não encontrado`,'error');},[drivers,toast]);
 
-  // === PARSE QR DATA ===
+  // === QR DATA PARSER ===
   const parseQRData=useCallback((raw)=>{
-    const result={at:null,driverId:null,driverName:null,qty:null,raw:raw};
-    // Extract AT code: starts with AT, alphanumeric (e.g. AT20260903994EM)
-    const atMatch=raw.match(/AT\d{8,}\w*/i);
-    if(atMatch) result.at=atMatch[0];
-    // Extract driver ID from [1234567] pattern
-    const driverBracket=raw.match(/\[(\d{4,})\]/);
-    if(driverBracket) result.driverId=driverBracket[1];
-    // Extract driver name after the bracket: [2405676] SERGIO LUCAS SEIXAS
-    const nameMatch=raw.match(/\[\d+\]\s*([A-ZÀ-Ú][A-ZÀ-Ú\s]{3,})/);
-    if(nameMatch) result.driverName=nameMatch[1].trim();
-    // Extract quantity: "Number of forward orders: 90" or just standalone number near "Pedidos"
-    const qtyMatch=raw.match(/(?:Number of (?:forward )?orders|Pedidos)[:\s]*(\d+)/i);
-    if(qtyMatch) result.qty=parseInt(qtyMatch[1]);
-    // If no AT found but raw starts with AT
-    if(!result.at && raw.toUpperCase().startsWith('AT')) result.at=raw.split(/[\s\n]/)[0];
-    // If no driver ID found, try pure numeric (6-7 digits)
-    if(!result.driverId){const numMatch=raw.match(/\b(\d{6,7})\b/);if(numMatch)result.driverId=numMatch[1];}
-    return result;
+    const r={at:null,driverId:null,driverName:null,qty:null,vehicleType:null,plate:null,raw:raw};
+    // AT code: AT followed by digits and optional suffix letters
+    const atM=raw.match(/AT\d{8,}\w*/i);if(atM)r.at=atM[0];
+    // Driver ID from [123456] pattern
+    const dbM=raw.match(/\[(\d{4,})\]/);if(dbM)r.driverId=dbM[1];
+    // Driver name after bracket
+    const nmM=raw.match(/\[\d+\]\s*([A-ZÀ-Ú][A-ZÀ-Ú\s]{3,})/);if(nmM)r.driverName=nmM[1].trim();
+    // Quantity
+    const qM=raw.match(/(?:Number of (?:forward )?orders|Pedidos)[:\s]*(\d+)/i);if(qM)r.qty=parseInt(qM[1]);
+    // Vehicle type (from barcode screen info)
+    const vtM=raw.match(/(?:Tipo do ve[ií]culo|vehicle type)[:\s]*(\w+)/i);if(vtM)r.vehicleType=vtM[1].toUpperCase();
+    // Plate
+    const plM=raw.match(/(?:Placa|plate)[:\s]*([A-Z0-9]{6,8})/i);if(plM)r.plate=plM[1].toUpperCase();
+    // Fallback: if starts with AT
+    if(!r.at&&raw.toUpperCase().startsWith('AT'))r.at=raw.split(/[\s\n]/)[0];
+    // Fallback: standalone 6-7 digit number as driver ID
+    if(!r.driverId){const nm=raw.match(/\b(\d{6,7})\b/);if(nm)r.driverId=nm[1];}
+    // Fallback: name in ALL CAPS at start of text
+    if(!r.driverName){const capM=raw.match(/^([A-ZÀ-Ú][A-ZÀ-Ú\s]{5,})\n/m);if(capM)r.driverName=capM[1].trim();}
+    return r;
   },[]);
 
   const handleScan=useCallback((code)=>{
-    setShowScan('');
-    if(!code)return;
-    const cleaned=code.trim();
-    const parsed=parseQRData(cleaned);
+    setShowScan('');if(!code)return;
+    const cleaned=code.trim();const parsed=parseQRData(cleaned);
+    setScanInfo(parsed); // always save scan info
 
     if(scanMode==='at'){
-      // AT MODE: prioritize extracting AT code
-      if(parsed.at){
-        setAtCode(parsed.at);
-        toast(`AT capturada: ${parsed.at}`,'success');
-        // Also auto-fill quantity if found
-        if(parsed.qty){setQtd(String(parsed.qty));toast(`Pacotes: ${parsed.qty}`,'info');}
-        // Also auto-fill driver if found in QR
-        if(parsed.driverId){
-          const f=drivers.find(d=>d.driver_id===parsed.driverId);
-          if(f){setSelDriver(f);setDSearch(f.driver_id);toast(`Driver: ${f.name}`);}
-          else{setDSearch(parsed.driverId);}
-        }
-      } else {
-        // Fallback: use entire scanned text as AT
-        setAtCode(cleaned);
-        toast(`AT: ${cleaned}`,'info');
-      }
+      if(parsed.at){setAtCode(parsed.at);toast(`AT: ${parsed.at}`);}else{setAtCode(cleaned);toast(`AT: ${cleaned}`,'info');}
+      if(parsed.qty){setQtd(String(parsed.qty));}
+      if(parsed.driverId){const f=drivers.find(d=>d.driver_id===parsed.driverId);if(f){setSelDriver(f);setDSearch(f.driver_id);}}
     } else {
-      // DRIVER MODE: prioritize extracting driver ID
-      if(parsed.driverId){
-        const f=drivers.find(d=>d.driver_id===parsed.driverId);
-        if(f){setSelDriver(f);setDSearch(f.driver_id);toast(`Driver: ${f.name}`);}
-        else{setDSearch(parsed.driverId);toast(`ID ${parsed.driverId} escaneado (não encontrado na base)`,'info');}
-      } else {
-        // Try as pure search
-        const ql=cleaned.toLowerCase();
-        const f=drivers.find(d=>d.driver_id===ql||d.name.toLowerCase().includes(ql));
-        if(f){setSelDriver(f);setDSearch(f.driver_id);toast(`Driver: ${f.name}`);}
-        else{toast(`"${cleaned.slice(0,40)}" — driver não identificado`,'error');}
-      }
-      // Also capture AT if present in QR data
-      if(parsed.at){setAtCode(parsed.at);toast(`AT também encontrada: ${parsed.at}`,'info');}
+      // Driver mode - barcode typically just contains the ID number
+      const did=parsed.driverId||cleaned.replace(/\D/g,'');
+      if(did){
+        const f=drivers.find(d=>d.driver_id===did);
+        if(f){
+          setSelDriver(f);setDSearch(f.driver_id);toast(`Driver: ${f.name}`);
+          // Auto-select profile from scan info or driver data
+          if(parsed.vehicleType){
+            const vt=parsed.vehicleType.toUpperCase();
+            if(vt.includes('MOTO'))setProfile('MOTO');
+            else if(vt.includes('FIORINO'))setProfile('FIORINO');
+            else if(vt.includes('PASSEIO')||vt.includes('CARRO'))setProfile('PASSEIO');
+          }
+        } else {setDSearch(did);toast(`ID ${did} escaneado (não na base local)`,'info');}
+      } else {toast(`Código não reconhecido: ${cleaned.slice(0,30)}`,'error');}
+      if(parsed.at){setAtCode(parsed.at);}
     }
   },[drivers,toast,scanMode,parseQRData]);
 
@@ -570,201 +524,141 @@ function App(){
   const handleImg=useCallback((e)=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onloadend=()=>setImg(r.result);r.readAsDataURL(f);}},[]);
 
   const submit=useCallback(()=>{
-    if(!selDriver){toast('Selecione um driver','error');return;}
-    if(!ocType){toast('Selecione o tipo de ocorrência','error');return;}
+    if(!selDriver&&!scanInfo?.driverId){toast('Selecione um driver','error');return;}
+    if(!ocType){toast('Selecione o tipo','error');return;}
     if(!motivo){toast('Selecione o motivo','error');return;}
     if(!profile){toast('Selecione o perfil','error');return;}
-    if(!qtd){toast('Informe a qtd de pacotes','error');return;}
-    const now=new Date();
-    const o={id:Date.now(),dataHora:now.toLocaleString('pt-BR'),driverId:selDriver.driver_id,nome:selDriver.name,hub:selDriver.hub,prefs:selDriver.cluster,ocorrencia:ocType,motivo,status,profile,bau:profile==='MOTO'?(BAUS.find(b=>b.id===selBau)?.name||''):'',qtd:parseInt(qtd)||0,at:atCode,obs,img,operador:user?.email||'',operadorNome:user?.name||'',lat:geo?.lat||null,lng:geo?.lng||null};
+    if(!qtd){toast('Informe qtd pacotes','error');return;}
+    const analyst=selAnalyst||user?.email||'';
+    const analystName=selAnalyst?adminUsers.find(a=>a.email===selAnalyst)?.name||selAnalyst:user?.name||'';
+    const o={id:Date.now(),dataHora:new Date().toLocaleString('pt-BR'),driverId:selDriver?.driver_id||scanInfo?.driverId||'',nome:selDriver?.name||scanInfo?.driverName||'',hub:myHub,prefs:selDriver?.cluster||'',ocorrencia:ocType,motivo,status,profile,bau:profile==='MOTO'?(BAUS.find(b=>b.id===selBau)?.name||''):'',qtd:parseInt(qtd)||0,at:atCode,obs,img,operador:analyst,operadorNome:analystName,registradoPor:user?.email||'',lat:geo?.lat||null,lng:geo?.lng||null,vehicleType:scanInfo?.vehicleType||'',plate:scanInfo?.plate||''};
     setOcs(p=>[o,...p]);toast('Ocorrência registrada! ✅');
-    setSelDriver(null);setDSearch('');setProfile('');setSelBau('');setQtd('');setMotivo('');setOcType('');setObs('');setAtCode('');setImg(null);setStatus('Pendente');
-  },[selDriver,ocType,motivo,profile,selBau,qtd,atCode,obs,img,status,user,geo,toast]);
+    setSelDriver(null);setDSearch('');setProfile('');setSelBau('');setQtd('');setMotivo('');setOcType('');setObs('');setAtCode('');setImg(null);setStatus('Pendente');setScanInfo(null);setSelAnalyst('');
+  },[selDriver,scanInfo,ocType,motivo,profile,selBau,qtd,atCode,obs,img,status,user,geo,toast,myHub,selAnalyst,adminUsers]);
 
-  const qClass=(v)=>{const n=parseInt(v);if(!n)return'';if(n>100)return'cr';if(n<30)return'wa';if(n>80)return'hi';return'no';};
-  const qMsg=(v)=>{const n=parseInt(v);if(!n)return'';if(n>100)return`⚠️ ALERTA: ${n} pkgs — Acima do limite!`;if(n<30)return`⚠️ ${n} pkgs — Abaixo do mínimo`;if(n>80)return`📦 ${n} pkgs — Volume alto`;return`✅ ${n} pkgs — OK`;};
+  const qC=(v)=>{const n=parseInt(v);if(!n)return'';if(n>100)return'cr';if(n<30)return'wa';if(n>80)return'hi';return'no';};
+  const qM=(v)=>{const n=parseInt(v);if(!n)return'';if(n>100)return`⚠️ ${n} pkgs — EXCESSO!`;if(n<30)return`⚠️ ${n} pkgs — Abaixo do mínimo`;if(n>80)return`📦 ${n} pkgs — Alto`;return`✅ ${n} pkgs — OK`;};
 
-  // Export CSV
   const exportCSV=useCallback(()=>{
-    const headers=['Data/Hora','Driver ID','Nome','HUB','Perfil','Baú','Pacotes','Ocorrência','Motivo','Status','AT','Observações','Operador','Lat','Lng'];
-    const rows=filteredOcs.map(o=>[o.dataHora,o.driverId,o.nome,o.hub,o.profile,o.bau,o.qtd,o.ocorrencia,o.motivo,o.status,o.at,o.obs,o.operadorNome||o.operador,o.lat||'',o.lng||'']);
-    const csv=[headers,...rows].map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
-    const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
-    const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`ocorrencias_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);
-    toast('CSV exportado!');
-  },[]);
+    const h=['Data/Hora','Driver ID','Nome','HUB','Perfil','Baú','Pacotes','Ocorrência','Motivo','Status','AT','Obs','Analista','Registrado Por','Veículo','Placa','Lat','Lng'];
+    const rows=filteredOcs.map(o=>[o.dataHora,o.driverId,o.nome,o.hub,o.profile,o.bau,o.qtd,o.ocorrencia,o.motivo,o.status,o.at,o.obs,o.operadorNome||o.operador,o.registradoPor||'',o.vehicleType||'',o.plate||'',o.lat||'',o.lng||'']);
+    const csv=[h,...rows].map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`ocorrencias_${myHub}_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);toast('CSV exportado!');
+  },[myHub]);
 
-  // Filtered occurrences
-  const filteredOcs=useMemo(()=>{
-    return ocs.filter(o=>{
-      if(fHub&&o.hub!==fHub)return false;
-      if(fStatus&&o.status!==fStatus)return false;
-      if(fMotivo&&o.motivo!==fMotivo)return false;
-      if(fPerfil&&o.profile!==fPerfil)return false;
-      if(fSearch){const q=fSearch.toLowerCase();if(!o.nome?.toLowerCase().includes(q)&&!o.driverId?.includes(q)&&!o.at?.toLowerCase().includes(q))return false;}
-      return true;
-    });
-  },[ocs,fHub,fStatus,fMotivo,fPerfil,fSearch]);
+  const filteredOcs=useMemo(()=>ocs.filter(o=>{
+    if(fHub&&o.hub!==fHub)return false;if(fStatus&&o.status!==fStatus)return false;if(fMotivo&&o.motivo!==fMotivo)return false;if(fPerfil&&o.profile!==fPerfil)return false;
+    if(fSearch){const q=fSearch.toLowerCase();if(!o.nome?.toLowerCase().includes(q)&&!o.driverId?.includes(q)&&!o.at?.toLowerCase().includes(q))return false;}return true;
+  }),[ocs,fHub,fStatus,fMotivo,fPerfil,fSearch]);
 
-  const stats=useMemo(()=>{
-    const d=filteredOcs;const tot=d.length,pen=d.filter(o=>o.status==='Pendente').length,ok=d.filter(o=>o.status==='OK').length;
-    const ea=d.filter(o=>o.status==='Em análise').length,esc=d.filter(o=>o.status==='Escalado').length;
-    const exc=d.filter(o=>o.qtd>100).length,pou=d.filter(o=>o.qtd>0&&o.qtd<30).length;
-    const mc={};d.forEach(o=>{if(o.motivo)mc[o.motivo]=(mc[o.motivo]||0)+1;});
-    const ms=Object.entries(mc).sort((a,b)=>b[1]-a[1]);
-    const pc={};d.forEach(o=>{if(o.profile)pc[o.profile]=(pc[o.profile]||0)+1;});
-    const hc={};d.forEach(o=>{if(o.hub)hc[o.hub]=(hc[o.hub]||0)+1;});
-    const hs=Object.entries(hc).sort((a,b)=>b[1]-a[1]);
-    return{tot,pen,ok,ea,esc,exc,pou,ms,pc,hs};
-  },[filteredOcs]);
+  const stats=useMemo(()=>{const d=filteredOcs;const tot=d.length,pen=d.filter(o=>o.status==='Pendente').length,ok=d.filter(o=>o.status==='OK').length,ea=d.filter(o=>o.status==='Em análise').length,esc=d.filter(o=>o.status==='Escalado').length,exc=d.filter(o=>o.qtd>100).length,pou=d.filter(o=>o.qtd>0&&o.qtd<30).length;const mc={};d.forEach(o=>{if(o.motivo)mc[o.motivo]=(mc[o.motivo]||0)+1;});const ms=Object.entries(mc).sort((a,b)=>b[1]-a[1]);const pc={};d.forEach(o=>{if(o.profile)pc[o.profile]=(pc[o.profile]||0)+1;});const hc={};d.forEach(o=>{if(o.hub)hc[o.hub]=(hc[o.hub]||0)+1;});const hs=Object.entries(hc).sort((a,b)=>b[1]-a[1]);return{tot,pen,ok,ea,esc,exc,pou,ms,pc,hs};},[filteredOcs]);
 
   const filtD=useMemo(()=>{if(!dSearch.trim())return[];const q=dSearch.toLowerCase();return drivers.filter(d=>d.driver_id.includes(q)||d.name.toLowerCase().includes(q)).slice(0,5);},[dSearch,drivers]);
+  const updateStatus=useCallback((id,ns)=>{setOcs(p=>p.map(o=>o.id===id?{...o,status:ns}:o));toast(`Status → ${ns}`);},[toast]);
+  const allHubs=useMemo(()=>[...new Set(ocs.map(o=>o.hub).filter(Boolean))],(ocs));
 
-  const updateStatus=useCallback((id,newStatus)=>{setOcs(p=>p.map(o=>o.id===id?{...o,status:newStatus}:o));toast(`Status → ${newStatus}`);},[toast]);
-
-  const allHubs=useMemo(()=>[...new Set(ocs.map(o=>o.hub).filter(Boolean))],[ocs]);
-
-  // === AUTH CHECK ===
   if(authLoading)return<div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--g50)'}}><div className="spinner" style={{width:32,height:32}}/></div>;
   if(!user)return<LoginScreen onLogin={handleLogin}/>;
 
-  return(
-    <div>
-      <Toast toasts={toasts}/>
-      <header className="hdr"><div className="hdr-in">
-        <div className="hdr-left"><div className="logo">S</div><div><h1>Sistema de Ocorrências</h1><div className="sub">Shopee Express — Gestão de Pacotes</div></div></div>
-        <div className="dnav">
-          {[['nova','add_circle','Nova'],['log','receipt_long','Log AT'],['lista','list_alt','Histórico'],['dashboard','dashboard','Dashboard']].map(([k,ic,lb])=>(
-            <button key={k} className={`dtab ${tab===k?'act':''}`} onClick={()=>setTab(k)}><MI n={ic}/><span>{lb}</span></button>
-          ))}
+  const tabs=[['nova','add_circle','Nova'],['log','receipt_long','Log AT'],['lista','list_alt','Histórico'],['dashboard','dashboard','Dashboard']];
+  if(isAdmin)tabs.push(['admin','settings','Admin']);
+
+  return(<div><Toast toasts={toasts}/>
+    <header className="hdr"><div className="hdr-in">
+      <div className="hdr-left"><div className="logo">S</div><div><h1>Ocorrências</h1><div className="sub">Shopee Express • HUB {myHub}</div></div></div>
+      <div className="dnav">{tabs.map(([k,ic,lb])=><button key={k} className={`dtab ${tab===k?'act':''}`} onClick={()=>setTab(k)}><MI n={ic}/><span>{lb}</span></button>)}</div>
+      <div className="hdr-right">
+        <div className="lock-icon"><MI n="lock" s={{fontSize:11}}/>AES-256</div>
+        <button className="theme-btn" onClick={()=>setTheme(t=>t==='light'?'dark':'light')}><MI n={theme==='light'?'dark_mode':'light_mode'}/></button>
+        <div className="hdr-user">{user.picture?<img src={user.picture} className="hdr-avatar" alt=""/>:<div className="hdr-avatar-placeholder">{user.name?.[0]||'?'}</div>}<span>{user.name?.split(' ')[0]}</span></div>
+        {isAdmin&&<button className="admin-gear" onClick={()=>setTab('admin')} title="Admin"><MI n="settings"/></button>}
+        <button className="theme-btn" onClick={handleLogout} title="Sair"><MI n="logout"/></button>
+      </div>
+    </div></header>
+
+    <nav className="mnav"><div className="mnav-in">{tabs.map(([k,ic,lb])=><button key={k} className={`mtab ${tab===k?'act':''}`} onClick={()=>setTab(k)}><MI n={ic}/><span>{lb}</span></button>)}</div></nav>
+
+    <main className="main">
+      {/* NOVA */}
+      {tab==='nova'&&(<div className="fade-in"><div className="two"><div>
+        <div className="card" style={{marginBottom:14}}>
+          <div className="card-h"><h2><MI n="person_search"/>Driver</h2><div style={{display:'flex',gap:4}}><button className="btn btn-p btn-sm" onClick={()=>{setScanMode('driver');setShowScan('open');}}><MI n="qr_code_scanner"/>ID Driver</button><button className="btn btn-sm" style={{background:'var(--bl)',color:'#fff'}} onClick={()=>{setScanMode('at');setShowScan('open');}}><MI n="receipt_long"/>AT</button></div></div>
+          <div className="card-b">
+            <div className="fg"><label className="fl">Buscar Driver</label><div style={{display:'flex',gap:6}}><input className="fi" placeholder="ID, Nome ou Telefone..." value={dSearch} onChange={e=>setDSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')findDriver(dSearch);}}/><button className="btn btn-p" onClick={()=>findDriver(dSearch)}><MI n="search"/></button></div>
+              {filtD.length>0&&!selDriver&&(<div style={{background:theme==='dark'?'var(--g100)':'#fff',border:'1px solid var(--g200)',borderRadius:8,marginTop:3,boxShadow:'0 4px 12px rgba(0,0,0,.08)',maxHeight:160,overflowY:'auto'}}>{filtD.map(d=>(<div key={d.driver_id} onClick={()=>{setSelDriver(d);setDSearch(d.driver_id);}} style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid var(--g100)',display:'flex',justifyContent:'space-between',alignItems:'center'}} onMouseOver={e=>e.currentTarget.style.background='var(--o50)'} onMouseOut={e=>e.currentTarget.style.background=theme==='dark'?'var(--g100)':'#fff'}><div><div style={{fontWeight:600,fontSize:12}}>{d.name}</div><div style={{fontSize:10,color:'var(--g500)'}}>ID: {d.driver_id} • {d.hub}</div></div><span className="bd bd-o">W{d.wave}</span></div>))}</div>)}
+            </div>
+            <DriverCard driver={selDriver} scanInfo={scanInfo}/>
+            {scanInfo&&scanInfo.at&&<ScanInfoCard info={scanInfo}/>}
+            <div className="fg"><label className="fl">Código AT</label><input className="fi" placeholder="AT20260903994EM" value={atCode} onChange={e=>setAtCode(e.target.value)} style={{fontFamily:'monospace'}}/></div>
+          </div>
         </div>
-        <div className="hdr-right">
-          <div className="lock-icon"><MI n="lock" s={{fontSize:11}}/>AES-256</div>
-          <button className="theme-btn" onClick={()=>setTheme(t=>t==='light'?'dark':'light')} title={theme==='light'?'Modo escuro':'Modo claro'}>
-            <MI n={theme==='light'?'dark_mode':'light_mode'}/>
-          </button>
-          <div className="hdr-user">
-            {user.picture?<img src={user.picture} className="hdr-avatar" alt=""/>:<div className="hdr-avatar-placeholder">{user.name?.[0]||'?'}</div>}
-            <span>{user.name?.split(' ')[0]||user.email}</span>
+        <div className="card" style={{marginBottom:14}}>
+          <div className="card-h"><h2><MI n="directions_car"/>Veículo</h2></div>
+          <div className="card-b">
+            <div className="prof-g">{PROFILES.map(p=>(<div key={p.id} className={`prof-c ${profile===p.id?'sel':''}`} onClick={()=>{setProfile(p.id);if(p.id!=='MOTO')setSelBau('');}}><div className="prof-ic">{p.icon}</div><div className="prof-n">{p.name}</div><div className="prof-d">{p.desc}</div></div>))}</div>
+            {profile==='MOTO'&&(<div style={{marginTop:14}}><label className="fl">Selecione o Baú</label><div className="bau-g">{BAUS.map(b=>(<div key={b.id} className={`bau-c ${selBau===b.id?'sel':''}`} onClick={()=>setSelBau(b.id)}><img src={BAU_IMAGES[b.id]} alt={b.name}/><div className="bl">{b.name}</div><div className="bc">{b.capacity}</div></div>))}</div></div>)}
           </div>
-          <button className="theme-btn" onClick={handleLogout} title="Sair"><MI n="logout"/></button>
         </div>
-      </div></header>
-
-      <nav className="mnav"><div className="mnav-in">
-        {[['nova','add_circle','Nova'],['log','receipt_long','Log'],['lista','list_alt','Lista'],['dashboard','dashboard','Dash']].map(([k,ic,lb])=>(
-          <button key={k} className={`mtab ${tab===k?'act':''}`} onClick={()=>setTab(k)}><MI n={ic}/><span>{lb}</span></button>
-        ))}
-      </div></nav>
-
-      <main className="main">
-        {/* === NOVA === */}
-        {tab==='nova'&&(<div className="fade-in"><div className="two">
-          <div>
-            <div className="card" style={{marginBottom:14}}>
-              <div className="card-h"><h2><MI n="person_search"/>Driver</h2><div style={{display:'flex',gap:4}}><button className="btn btn-p btn-sm" onClick={()=>{setScanMode('driver');setShowScan('open');}}><MI n="qr_code_scanner"/>ID Driver</button><button className="btn btn-sm" style={{background:'var(--bl)',color:'#fff'}} onClick={()=>{setScanMode('at');setShowScan('open');}}><MI n="receipt_long"/>AT</button></div></div>
-              <div className="card-b">
-                <div className="fg"><label className="fl">Buscar Driver</label><div style={{display:'flex',gap:6}}><input className="fi" placeholder="ID, Nome ou Telefone..." value={dSearch} onChange={e=>setDSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')findDriver(dSearch);}}/><button className="btn btn-p" onClick={()=>findDriver(dSearch)}><MI n="search"/></button></div>
-                  {filtD.length>0&&!selDriver&&(<div style={{background:theme==='dark'?'var(--g100)':'#fff',border:'1px solid var(--g200)',borderRadius:8,marginTop:3,boxShadow:'0 4px 12px rgba(0,0,0,.08)',maxHeight:160,overflowY:'auto'}}>{filtD.map(d=>(<div key={d.driver_id} onClick={()=>{setSelDriver(d);setDSearch(d.driver_id);}} style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid var(--g100)',display:'flex',justifyContent:'space-between',alignItems:'center'}} onMouseOver={e=>e.currentTarget.style.background='var(--o50)'} onMouseOut={e=>e.currentTarget.style.background=theme==='dark'?'var(--g100)':'#fff'}><div><div style={{fontWeight:600,fontSize:12}}>{d.name}</div><div style={{fontSize:10,color:'var(--g500)'}}>ID: {d.driver_id} • {d.hub}</div></div><span className="bd bd-o">W{d.wave}</span></div>))}</div>)}
-                </div>
-                <DriverCard driver={selDriver}/>
-                <div className="fg"><label className="fl">Código AT</label><input className="fi" placeholder="AT-VG-20261005-001" value={atCode} onChange={e=>setAtCode(e.target.value)}/></div>
+      </div><div>
+        <div className="card" style={{marginBottom:14}}>
+          <div className="card-h"><h2><MI n="warning_amber"/>Ocorrência</h2></div>
+          <div className="card-b">
+            <div className="fg"><label className="fl">Analista responsável</label>
+              <div className="analyst-select">
+                <button className={`analyst-chip ${selAnalyst===''?'sel':''}`} onClick={()=>setSelAnalyst('')}><MI n="person" s={{fontSize:14}}/>Eu ({user?.name?.split(' ')[0]})</button>
+                {hubAnalysts.filter(a=>a.email!==user?.email).map(a=>(<button key={a.email} className={`analyst-chip ${selAnalyst===a.email?'sel':''}`} onClick={()=>setSelAnalyst(a.email)}><MI n="person_outline" s={{fontSize:14}}/>{a.name||a.email.split('@')[0]}</button>))}
               </div>
             </div>
-            <div className="card" style={{marginBottom:14}}>
-              <div className="card-h"><h2><MI n="directions_car"/>Veículo</h2></div>
-              <div className="card-b">
-                <div className="prof-g">{PROFILES.map(p=>(<div key={p.id} className={`prof-c ${profile===p.id?'sel':''}`} onClick={()=>{setProfile(p.id);if(p.id!=='MOTO')setSelBau('');}}><div className="prof-ic">{p.icon}</div><div className="prof-n">{p.name}</div><div className="prof-d">{p.desc}</div></div>))}</div>
-                {profile==='MOTO'&&(<div style={{marginTop:14}}><label className="fl">Selecione o Baú</label><div className="bau-g">{BAUS.map(b=>(<div key={b.id} className={`bau-c ${selBau===b.id?'sel':''}`} onClick={()=>setSelBau(b.id)}><img src={BAU_IMAGES[b.id]} alt={b.name}/><div className="bl">{b.name}</div><div className="bc">{b.capacity}</div></div>))}</div></div>)}
-              </div>
-            </div>
+            <div className="fg"><label className="fl">Qtd Pacotes *</label><input className="fi" type="number" placeholder="Ex: 45" value={qtd} onChange={e=>setQtd(e.target.value)}/>{qtd&&<div className={`qi ${qC(qtd)}`}><MI n={qC(qtd)==='no'?'check_circle':'warning'} s={{fontSize:16}}/>{qM(qtd)}</div>}</div>
+            <div className="fg"><label className="fl">Tipo *</label><select className="fs" value={ocType} onChange={e=>setOcType(e.target.value)}><option value="">Selecione...</option>{OC_TYPES.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+            <div className="fg"><label className="fl">Motivo *</label><div className="mot-g">{MOTIVOS.map(m=><button key={m} className={`mot ${motivo===m?'sel':''}`} onClick={()=>setMotivo(m)}>{m}</button>)}</div></div>
+            <div className="fg"><label className="fl">Status</label><select className="fs" value={status} onChange={e=>setStatus(e.target.value)}><option value="Pendente">⏳ Pendente</option><option value="Em análise">🔍 Em análise</option><option value="OK">✅ Resolvido</option><option value="Escalado">🔴 Escalado</option></select></div>
+            <div className="fg"><label className="fl">Observações</label><textarea className="ft" placeholder="Detalhes..." value={obs} onChange={e=>setObs(e.target.value)}/></div>
+            <div className="fg"><label className="fl">Evidência</label><div className={`up ${img?'has':''}`} onClick={()=>fRef.current?.click()}>{img?<img src={img} alt=""/>:<><MI n="cloud_upload"/><div style={{fontSize:12,fontWeight:600,color:'var(--g600)'}}>Upload</div></>}</div><input type="file" ref={fRef} accept="image/*" capture="environment" style={{display:'none'}} onChange={handleImg}/>{img&&<button className="btn btn-sm btn-s" onClick={()=>setImg(null)} style={{marginTop:4}}><MI n="delete"/>Remover</button>}</div>
+            {geo&&<div style={{fontSize:10,color:'var(--g400)',display:'flex',alignItems:'center',gap:4,marginBottom:6}}><MI n="location_on" s={{fontSize:12}}/>{geo.lat.toFixed(4)}, {geo.lng.toFixed(4)}</div>}
+            <button className="btn btn-p btn-lg" onClick={submit} style={{width:'100%',marginTop:8}}><MI n="save"/>Registrar Ocorrência</button>
           </div>
-          <div>
-            <div className="card" style={{marginBottom:14}}>
-              <div className="card-h"><h2><MI n="warning_amber"/>Ocorrência</h2></div>
-              <div className="card-b">
-                <div className="fg"><label className="fl">Qtd Pacotes *</label><input className="fi" type="number" placeholder="Ex: 45" value={qtd} onChange={e=>setQtd(e.target.value)}/>{qtd&&<div className={`qi ${qClass(qtd)}`}><MI n={qClass(qtd)==='no'?'check_circle':'warning'} s={{fontSize:16}}/>{qMsg(qtd)}</div>}</div>
-                <div className="fg"><label className="fl">Tipo *</label><select className="fs" value={ocType} onChange={e=>setOcType(e.target.value)}><option value="">Selecione...</option>{OC_TYPES.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
-                <div className="fg"><label className="fl">Motivo *</label><div className="mot-g">{MOTIVOS.map(m=><button key={m} className={`mot ${motivo===m?'sel':''}`} onClick={()=>setMotivo(m)}>{m}</button>)}</div></div>
-                <div className="fg"><label className="fl">Status</label><select className="fs" value={status} onChange={e=>setStatus(e.target.value)}><option value="Pendente">⏳ Pendente</option><option value="Em análise">🔍 Em análise</option><option value="OK">✅ Resolvido</option><option value="Escalado">🔴 Escalado</option></select></div>
-                <div className="fg"><label className="fl">Observações</label><textarea className="ft" placeholder="Detalhes..." value={obs} onChange={e=>setObs(e.target.value)}/></div>
-                <div className="fg"><label className="fl">Evidência (foto)</label><div className={`up ${img?'has':''}`} onClick={()=>fRef.current?.click()}>{img?<img src={img} alt=""/>:<><MI n="cloud_upload"/><div style={{fontSize:12,fontWeight:600,color:'var(--g600)'}}>Toque para upload</div><div style={{fontSize:10,color:'var(--g400)'}}>JPG, PNG, WebP</div></>}</div><input type="file" ref={fRef} accept="image/*" capture="environment" style={{display:'none'}} onChange={handleImg}/>{img&&<button className="btn btn-sm btn-s" onClick={()=>setImg(null)} style={{marginTop:4}}><MI n="delete"/>Remover</button>}</div>
-                {geo&&<div style={{fontSize:10,color:'var(--g400)',display:'flex',alignItems:'center',gap:4,marginBottom:8}}><MI n="location_on" s={{fontSize:12}}/>Localização: {geo.lat.toFixed(4)}, {geo.lng.toFixed(4)}</div>}
-                <div className="op-info"><MI n="person" s={{fontSize:12}}/>Registrando como: {user?.name||user?.email}</div>
-                <button className="btn btn-p btn-lg" onClick={submit} style={{width:'100%',marginTop:12}}><MI n="save"/>Registrar Ocorrência</button>
-              </div>
-            </div>
-          </div>
-        </div></div>)}
+        </div>
+      </div></div></div>)}
 
-        {/* === LOG AT === */}
-        {tab==='log'&&(<div className="fade-in">
-          <div className="card" style={{marginBottom:14}}>
-            <div className="card-h"><h2><MI n="terminal"/>Log de ATs</h2><button className="btn btn-sm" style={{background:'var(--bl)',color:'#fff'}} onClick={()=>{setScanMode('at');setShowScan('open');}}><MI n="receipt_long"/>Escanear AT</button></div>
-            <div className="card-b"><div className="log">{AT_LOGS.map((l,i)=>(<div key={i} className="log-l"><span className="log-t">[{l.time}]</span><span className="log-at">{l.at}</span><span style={{color:'#555'}}>→</span><span style={{color:'#F0ABFC'}}>{l.driver}</span><span style={{color:'#555'}}>|</span><span className="log-q" style={{color:l.qty>100||l.qty<30?'#EF4444':'#22C55E'}}>{l.qty}pkgs</span><span className="log-s">{l.st}</span></div>))}</div></div>
-          </div>
-          <div className="card"><div className="card-h"><h2><MI n="flash_on"/>Alertas</h2></div><div className="card-b"><div style={{display:'flex',flexDirection:'column',gap:8}}>{AT_LOGS.filter(l=>l.qty>100||l.qty<30).map((l,i)=>(<div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:12,background:l.qty>100?'var(--rd1)':'var(--yl1)',borderRadius:8,flexWrap:'wrap',gap:6}}><div><div style={{fontWeight:700,fontSize:12}}>{l.at} — {l.driver}</div><div style={{fontSize:11,color:'var(--g600)',marginTop:2}}>{l.qty>100?`🔴 ${l.qty}pkgs EXCESSO`:`🟡 ${l.qty}pkgs POUCOS`}</div></div><button className="btn btn-p btn-sm" onClick={()=>{setTab('nova');setAtCode(l.at);setQtd(String(l.qty));const nm=l.driver.split(' ')[0].toLowerCase();const fd=drivers.find(d=>d.name.toLowerCase().includes(nm));if(fd){setSelDriver(fd);setDSearch(fd.driver_id);}l.qty>100?setOcType('Excesso de pacotes (>100)'):setOcType('Poucos pacotes (<30)');}}><MI n="add"/>Abrir</button></div>))}</div></div></div>
-        </div>)}
+      {/* LOG AT */}
+      {tab==='log'&&(<div className="fade-in">
+        <div className="card" style={{marginBottom:14}}>
+          <div className="card-h"><h2><MI n="terminal"/>Log de ATs</h2><button className="btn btn-sm" style={{background:'var(--bl)',color:'#fff'}} onClick={()=>{setScanMode('at');setShowScan('open');}}><MI n="receipt_long"/>Escanear AT</button></div>
+          <div className="card-b"><div className="log">{AT_LOGS.map((l,i)=>(<div key={i} className="log-l"><span className="log-t">[{l.time}]</span><span className="log-at">{l.at}</span><span style={{color:'#555'}}>→</span><span style={{color:'#F0ABFC'}}>{l.driver}</span><span style={{color:'#555'}}>|</span><span className="log-q" style={{color:l.qty>100||l.qty<30?'#EF4444':'#22C55E'}}>{l.qty}pkgs</span><span className="log-s">{l.st}</span></div>))}</div></div>
+        </div>
+        <div className="card"><div className="card-h"><h2><MI n="flash_on"/>Alertas</h2></div><div className="card-b"><div style={{display:'flex',flexDirection:'column',gap:8}}>{AT_LOGS.filter(l=>l.qty>100||l.qty<30).map((l,i)=>(<div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:12,background:l.qty>100?'var(--rd1)':'var(--yl1)',borderRadius:8,flexWrap:'wrap',gap:6}}><div><div style={{fontWeight:700,fontSize:12}}>{l.at} — {l.driver}</div><div style={{fontSize:11,color:'var(--g600)',marginTop:2}}>{l.qty>100?`🔴 ${l.qty}pkgs EXCESSO`:`🟡 ${l.qty}pkgs POUCOS`}</div></div><button className="btn btn-p btn-sm" onClick={()=>{setTab('nova');setAtCode(l.at);setQtd(String(l.qty));const nm=l.driver.split(' ')[0].toLowerCase();const fd=drivers.find(d=>d.name.toLowerCase().includes(nm));if(fd){setSelDriver(fd);setDSearch(fd.driver_id);}l.qty>100?setOcType('Excesso de pacotes (>100)'):setOcType('Poucos pacotes (<30)');}}><MI n="add"/>Abrir</button></div>))}</div></div></div>
+      </div>)}
 
-        {/* === HISTÓRICO === */}
-        {tab==='lista'&&(<div className="fade-in">
-          <div className="card">
-            <div className="card-h"><h2><MI n="history"/>Histórico <span className="bd bd-o">{filteredOcs.length}</span></h2>
-              <button className="btn btn-sm btn-s" onClick={exportCSV}><MI n="download"/>CSV</button>
-            </div>
-            <div className="card-b" style={{paddingBottom:0}}>
-              <div className="filter-bar">
-                <input className="fi" placeholder="🔍 Buscar..." value={fSearch} onChange={e=>setFSearch(e.target.value)} style={{maxWidth:180}}/>
-                <select className="fs" value={fHub} onChange={e=>setFHub(e.target.value)}><option value="">Hub</option>{allHubs.map(h=><option key={h}>{h}</option>)}</select>
-                <select className="fs" value={fStatus} onChange={e=>setFStatus(e.target.value)}><option value="">Status</option><option>Pendente</option><option>Em análise</option><option>OK</option><option>Escalado</option></select>
-                <select className="fs" value={fMotivo} onChange={e=>setFMotivo(e.target.value)}><option value="">Motivo</option>{MOTIVOS.map(m=><option key={m}>{m}</option>)}</select>
-                <select className="fs" value={fPerfil} onChange={e=>setFPerfil(e.target.value)}><option value="">Perfil</option>{PROFILES.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
-                {(fHub||fStatus||fMotivo||fPerfil||fSearch)&&<button className="btn btn-sm btn-d" onClick={()=>{setFHub('');setFStatus('');setFMotivo('');setFPerfil('');setFSearch('');}}><MI n="clear"/>Limpar</button>}
-              </div>
-            </div>
-            <div style={{padding:0}}>
-              {filteredOcs.length===0?(<div className="empty"><MI n="inbox"/><h3>Nenhuma ocorrência</h3><p>Sem resultados para os filtros aplicados</p></div>):(<div className="tc"><table><thead><tr><th>Data</th><th>Driver</th><th>HUB</th><th>Perfil</th><th>Pkgs</th><th>Tipo</th><th>Motivo</th><th>AT</th><th>Operador</th><th>Status</th><th>Ação</th></tr></thead><tbody>
-                {filteredOcs.map(o=>(<tr key={o.id}>
-                  <td style={{whiteSpace:'nowrap',fontSize:10}}>{o.dataHora}</td>
-                  <td><div style={{fontWeight:600,fontSize:11}}>{o.nome}</div><div style={{fontSize:9,color:'var(--g400)'}}>ID: {o.driverId}</div></td>
-                  <td><span className="bd bd-b">{o.hub}</span></td>
-                  <td><span className="bd bd-gr">{o.profile==='MOTO'?'🏍️':o.profile==='PASSEIO'?'🚗':'🚐'}{o.profile}</span></td>
-                  <td><span style={{fontWeight:700,color:(o.qtd>100||o.qtd<30)?'var(--rd)':'var(--gn)'}}>{o.qtd||'—'}</span></td>
-                  <td style={{fontSize:10}}>{o.ocorrencia}</td>
-                  <td><span className="bd bd-o">{o.motivo}</span></td>
-                  <td style={{fontFamily:'monospace',fontSize:9}}>{o.at||'—'}</td>
-                  <td style={{fontSize:10}}>{o.operadorNome||o.operador||'—'}</td>
-                  <td><select className="fs" value={o.status} onChange={e=>updateStatus(o.id,e.target.value)} style={{padding:'3px 20px 3px 6px',fontSize:10,minWidth:90,borderColor:o.status==='OK'?'var(--gn)':o.status==='Escalado'?'var(--rd)':o.status==='Em análise'?'var(--bl)':'var(--yl)'}}><option>Pendente</option><option>Em análise</option><option>OK</option><option>Escalado</option></select></td>
-                  <td>{o.img&&<button className="btn btn-sm btn-s" onClick={()=>{window.open(o.img,'_blank');}}><MI n="image"/></button>}</td>
-                </tr>))}
-              </tbody></table></div>)}
-            </div>
-          </div>
-        </div>)}
+      {/* HISTÓRICO */}
+      {tab==='lista'&&(<div className="fade-in"><div className="card">
+        <div className="card-h"><h2><MI n="history"/>Histórico <span className="bd bd-o">{filteredOcs.length}</span></h2><button className="btn btn-sm btn-s" onClick={exportCSV}><MI n="download"/>CSV</button></div>
+        <div className="card-b" style={{paddingBottom:0}}>
+          <div className="filter-bar"><input className="fi" placeholder="🔍 Buscar..." value={fSearch} onChange={e=>setFSearch(e.target.value)} style={{maxWidth:180}}/><select className="fs" value={fHub} onChange={e=>setFHub(e.target.value)}><option value="">Hub</option>{allHubs.map(h=><option key={h}>{h}</option>)}</select><select className="fs" value={fStatus} onChange={e=>setFStatus(e.target.value)}><option value="">Status</option><option>Pendente</option><option>Em análise</option><option>OK</option><option>Escalado</option></select><select className="fs" value={fMotivo} onChange={e=>setFMotivo(e.target.value)}><option value="">Motivo</option>{MOTIVOS.map(m=><option key={m}>{m}</option>)}</select>{(fHub||fStatus||fMotivo||fPerfil||fSearch)&&<button className="btn btn-sm btn-d" onClick={()=>{setFHub('');setFStatus('');setFMotivo('');setFPerfil('');setFSearch('');}}><MI n="clear"/>Limpar</button>}</div>
+        </div>
+        <div style={{padding:0}}>{filteredOcs.length===0?(<div className="empty"><MI n="inbox"/><h3>Sem ocorrências</h3></div>):(<div className="tc"><table><thead><tr><th>Data</th><th>Driver</th><th>HUB</th><th>Perfil</th><th>Pkgs</th><th>Tipo</th><th>Motivo</th><th>AT</th><th>Analista</th><th>Status</th></tr></thead><tbody>
+          {filteredOcs.map(o=>(<tr key={o.id}><td style={{whiteSpace:'nowrap',fontSize:10}}>{o.dataHora}</td><td><div style={{fontWeight:600,fontSize:11}}>{o.nome}</div><div style={{fontSize:9,color:'var(--g400)'}}>ID:{o.driverId}{o.plate?` • ${o.plate}`:''}</div></td><td><span className="bd bd-b">{o.hub}</span></td><td><span className="bd bd-gr">{o.profile==='MOTO'?'🏍️':o.profile==='PASSEIO'?'🚗':'🚐'}{o.profile}</span></td><td><span style={{fontWeight:700,color:(o.qtd>100||o.qtd<30)?'var(--rd)':'var(--gn)'}}>{o.qtd||'—'}</span></td><td style={{fontSize:10}}>{o.ocorrencia}</td><td><span className="bd bd-o">{o.motivo}</span></td><td style={{fontFamily:'monospace',fontSize:9}}>{o.at||'—'}</td><td style={{fontSize:10}}>{o.operadorNome||'—'}</td><td><select className="fs" value={o.status} onChange={e=>updateStatus(o.id,e.target.value)} style={{padding:'3px 20px 3px 6px',fontSize:10,minWidth:85}}><option>Pendente</option><option>Em análise</option><option>OK</option><option>Escalado</option></select></td></tr>))}
+        </tbody></table></div>)}</div>
+      </div></div>)}
 
-        {/* === DASHBOARD === */}
-        {tab==='dashboard'&&(<div className="fade-in">
-          <div className="st-g">
-            {[['so',stats.tot,'Total','assignment'],['sy',stats.pen,'Pendentes','pending_actions'],['sb',stats.ea,'Em Análise','search'],['sg',stats.ok,'Resolvidas','check_circle'],['sr',stats.esc,'Escaladas','priority_high'],['sr',stats.exc,'Excesso >100','trending_up'],['sy',stats.pou,'Poucos <30','trending_down']].map(([c,v,l,ic],i)=>(
-              <div key={l+i} className={`st ${c}`}><div className="st-v">{v}</div><div className="st-l">{l}</div><span className="material-icons-round mi st-i">{ic}</span></div>
-            ))}
-          </div>
-          <div className="two">
-            <div className="card"><div className="card-h"><h2><MI n="bar_chart"/>Por Motivo</h2></div><div className="card-b">{stats.ms.length===0?<div className="empty" style={{padding:20}}><p>Sem dados</p></div>:(<div className="cb-c">{stats.ms.slice(0,10).map(([m,c],i)=>{const mx=stats.ms[0][1];const p=(c/mx)*100;const cols=['var(--sh)','var(--shd)','var(--o400)','var(--yl)','var(--bl)','var(--gn)','var(--g500)','#8B5CF6','#EC4899','#14B8A6'];return<div key={m} className="cb-r"><div className="cb-l" title={m}>{m}</div><div className="cb-t"><div className="cb-f" style={{width:`${p}%`,background:cols[i%cols.length]}}>{c}</div></div></div>;})}</div>)}</div></div>
-            <div className="card"><div className="card-h"><h2><MI n="pie_chart"/>Por Perfil</h2></div><div className="card-b">{Object.entries(stats.pc).length===0?<div className="empty" style={{padding:20}}><p>Sem dados</p></div>:(<div style={{display:'flex',flexDirection:'column',gap:12}}>{Object.entries(stats.pc).map(([pr,c])=>{const ic=pr==='MOTO'?'🏍️':pr==='PASSEIO'?'🚗':'🚐';const pct=stats.tot?((c/stats.tot)*100).toFixed(0):'0';return(<div key={pr} style={{display:'flex',alignItems:'center',gap:12,padding:12,background:'var(--g50)',borderRadius:8}}><div style={{fontSize:24}}>{ic}</div><div style={{flex:1}}><div style={{fontWeight:700,fontSize:13}}>{pr}</div><div style={{height:6,background:'var(--g200)',borderRadius:3,marginTop:4,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:'var(--sh)',borderRadius:3}}/></div></div><div style={{fontWeight:800,fontSize:16,color:'var(--sh)'}}>{c}</div><div style={{fontSize:11,color:'var(--g500)'}}>({pct}%)</div></div>);})}</div>)}</div></div>
-          </div>
-          {stats.hs.length>0&&<div className="card" style={{marginTop:14}}><div className="card-h"><h2><MI n="hub"/>Por HUB</h2></div><div className="card-b"><div className="cb-c">{stats.hs.map(([h,c],i)=>{const mx=stats.hs[0][1];const p=(c/mx)*100;return<div key={h} className="cb-r"><div className="cb-l">{h}</div><div className="cb-t"><div className="cb-f" style={{width:`${p}%`,background:i===0?'var(--sh)':'var(--bl)'}}>{c}</div></div></div>;})}</div></div></div>}
-          <div className="card" style={{marginTop:14}}>
-            <div className="card-h"><h2><MI n="schedule"/>Últimas</h2></div>
-            <div style={{padding:0}}><div className="tc"><table><thead><tr><th>Data</th><th>Driver</th><th>Pkgs</th><th>Motivo</th><th>Operador</th><th>Status</th></tr></thead><tbody>
-              {ocs.slice(0,8).map(o=>(<tr key={o.id}><td style={{whiteSpace:'nowrap',fontSize:10}}>{o.dataHora}</td><td><div style={{fontWeight:600,fontSize:11}}>{o.nome}</div><div style={{fontSize:9,color:'var(--g400)'}}>ID: {o.driverId}</div></td><td><span style={{fontWeight:700,color:(o.qtd>100||o.qtd<30)?'var(--rd)':'var(--gn)'}}>{o.qtd||'—'}</span></td><td><span className="bd bd-o">{o.motivo}</span></td><td style={{fontSize:10}}>{o.operadorNome||'—'}</td><td><span className={`bd ${o.status==='OK'?'bd-g':o.status==='Pendente'?'bd-y':o.status==='Escalado'?'bd-r':'bd-b'}`}>{o.status}</span></td></tr>))}
-            </tbody></table></div></div>
-          </div>
-        </div>)}
-      </main>
-      {showScan&&<QRScanner onScan={handleScan} onClose={()=>setShowScan('')} mode={scanMode}/>}
-    </div>
-  );
+      {/* DASHBOARD */}
+      {tab==='dashboard'&&(<div className="fade-in">
+        <div className="st-g">{[['so',stats.tot,'Total','assignment'],['sy',stats.pen,'Pendentes','pending_actions'],['sb',stats.ea,'Em Análise','search'],['sg',stats.ok,'Resolvidas','check_circle'],['sr',stats.esc,'Escaladas','priority_high'],['sr',stats.exc,'Excesso>100','trending_up'],['sy',stats.pou,'Poucos<30','trending_down']].map(([c,v,l,ic],i)=><div key={l+i} className={`st ${c}`}><div className="st-v">{v}</div><div className="st-l">{l}</div><span className="material-icons-round mi st-i">{ic}</span></div>)}</div>
+        <div className="two">
+          <div className="card"><div className="card-h"><h2><MI n="bar_chart"/>Por Motivo</h2></div><div className="card-b">{stats.ms.length===0?<div className="empty" style={{padding:20}}><p>Sem dados</p></div>:<div className="cb-c">{stats.ms.slice(0,10).map(([m,c],i)=>{const mx=stats.ms[0][1];const p=(c/mx)*100;const cols=['var(--sh)','var(--shd)','var(--o400)','var(--yl)','var(--bl)','var(--gn)','var(--g500)','#8B5CF6','#EC4899','#14B8A6'];return<div key={m} className="cb-r"><div className="cb-l" title={m}>{m}</div><div className="cb-t"><div className="cb-f" style={{width:`${p}%`,background:cols[i%cols.length]}}>{c}</div></div></div>;})}</div>}</div></div>
+          <div className="card"><div className="card-h"><h2><MI n="pie_chart"/>Por Perfil</h2></div><div className="card-b">{Object.entries(stats.pc).length===0?<div className="empty" style={{padding:20}}><p>Sem dados</p></div>:<div style={{display:'flex',flexDirection:'column',gap:12}}>{Object.entries(stats.pc).map(([pr,c])=>{const ic=pr==='MOTO'?'🏍️':pr==='PASSEIO'?'🚗':'🚐';const pct=stats.tot?((c/stats.tot)*100).toFixed(0):'0';return<div key={pr} style={{display:'flex',alignItems:'center',gap:12,padding:12,background:'var(--g50)',borderRadius:8}}><div style={{fontSize:24}}>{ic}</div><div style={{flex:1}}><div style={{fontWeight:700,fontSize:13}}>{pr}</div><div style={{height:6,background:'var(--g200)',borderRadius:3,marginTop:4,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:'var(--sh)',borderRadius:3}}/></div></div><div style={{fontWeight:800,fontSize:16,color:'var(--sh)'}}>{c}</div><div style={{fontSize:11,color:'var(--g500)'}}>({pct}%)</div></div>;})}</div>}</div></div>
+        </div>
+      </div>)}
+
+      {/* ADMIN */}
+      {tab==='admin'&&isAdmin&&(<AdminPanel users={adminUsers} currentUser={user}
+        onUpdate={(i,u)=>setAdminUsers(p=>{const n=[...p];n[i]=u;return n;})}
+        onAdd={(u)=>{if(adminUsers.find(a=>a.email===u.email)){toast('Email já cadastrado','error');return;}setAdminUsers(p=>[...p,u]);toast(`${u.email} adicionado!`);}}
+        onRemove={(i)=>{const email=adminUsers[i]?.email;if(email===DEFAULT_ADMIN){toast('Não pode remover o admin principal','error');return;}setAdminUsers(p=>p.filter((_,idx)=>idx!==i));toast('Removido');}}
+      />)}
+    </main>
+    {showScan&&<QRScanner onScan={handleScan} onClose={()=>setShowScan('')} mode={scanMode}/>}
+  </div>);
 }
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
