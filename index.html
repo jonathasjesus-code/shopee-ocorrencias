@@ -308,7 +308,14 @@ function QRScanner({onScan,onClose,mode}){
   const modeLabel=isAT?'AT (Log)':'Driver ID';
   const modeColor=isAT?'var(--bl)':'var(--sh)';
   useEffect(()=>{mountedRef.current=true;return()=>{mountedRef.current=false;if(hRef.current){try{hRef.current.stop().then(()=>{try{hRef.current.clear();}catch(e){}}).catch(()=>{try{hRef.current.clear();}catch(e){}});}catch(e){}};};},[]);
-  const start=useCallback(()=>{setScanning(true);setTimeout(()=>{const el=document.getElementById('qr-scanner-region');if(!el||!window.Html5Qrcode){setScanning(false);return;}try{const scanner=new Html5Qrcode("qr-scanner-region");hRef.current=scanner;scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:220,height:220},aspectRatio:1.0},(t)=>{scanner.stop().then(()=>{try{scanner.clear();}catch(e){}}).catch(()=>{});hRef.current=null;if(mountedRef.current){setScanning(false);setScanResult(t);}},()=>{}).catch((e)=>{if(mountedRef.current)setScanning(false);});}catch(e){if(mountedRef.current)setScanning(false);}},500);},[]);
+  const start=useCallback(()=>{setScanning(true);setTimeout(()=>{const el=document.getElementById('qr-scanner-region');if(!el||!window.Html5Qrcode){setScanning(false);return;}try{
+      // Configure formats: QR for AT mode, barcodes for Driver mode
+      const formats=isAT
+        ?[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.DATA_MATRIX]
+        :[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.ITF,Html5QrcodeSupportedFormats.QR_CODE];
+      const scanner=new Html5Qrcode("qr-scanner-region",{formatsToSupport:formats,verbose:false});
+      hRef.current=scanner;
+      scanner.start({facingMode:"environment"},{fps:15,qrbox:isAT?{width:250,height:250}:{width:280,height:150},aspectRatio:isAT?1.0:1.5},(t)=>{scanner.stop().then(()=>{try{scanner.clear();}catch(e){}}).catch(()=>{});hRef.current=null;if(mountedRef.current){setScanning(false);setScanResult(t);}},()=>{}).catch((e)=>{console.warn('Scan err:',e);if(mountedRef.current)setScanning(false);});}catch(e){console.warn('Init err:',e);if(mountedRef.current)setScanning(false);}},500);},[isAT]);
   const stop=useCallback(()=>{if(hRef.current){try{hRef.current.stop().then(()=>{try{hRef.current.clear();}catch(e){}}).catch(()=>{try{hRef.current.clear();}catch(e){}});}catch(e){}hRef.current=null;}setScanning(false);},[]);
   const handleSubmit=useCallback((val)=>{if(!val||!val.trim())return;stop();setTimeout(()=>onScan(val.trim()),100);},[onScan,stop]);
   useEffect(()=>{if(scanResult){handleSubmit(scanResult);setScanResult('');}},[scanResult,handleSubmit]);
@@ -318,7 +325,7 @@ function QRScanner({onScan,onClose,mode}){
     <div className="modal-b">
       <div style={{background:isAT?'var(--bl1)':'var(--o50)',padding:'8px 12px',borderRadius:8,marginBottom:14,fontSize:11,fontWeight:600,color:isAT?'#1E40AF':'var(--o700)',display:'flex',alignItems:'center',gap:6}}>
         <MI n={isAT?'receipt_long':'badge'} s={{fontSize:16}}/>
-        {isAT?'Escaneie o QR Code do LOG → captura AT + qtd pacotes':'Escaneie o código de barras do driver → captura ID, nome, veículo, placa'}
+        {isAT?'Escaneie o QR CODE do LOG → captura AT completa + qtd pacotes + driver':'Escaneie o CÓDIGO DE BARRAS do driver → captura o ID automaticamente'}
       </div>
       {!scanning?(<div style={{textAlign:'center'}}><button className="btn btn-p btn-lg" onClick={start} style={{marginBottom:18,background:isAT?'linear-gradient(135deg,var(--bl),#1E40AF)':undefined}}><MI n="camera_alt"/>Abrir Câmera</button><div className="sdiv"><span>ou digite</span></div><div style={{display:'flex',gap:6,marginTop:10}}><input className="fi" placeholder={isAT?'Ex: AT20260903994EM':'Ex: 654347'} value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&mi.trim())handleSubmit(mi);}} autoFocus/><button className="btn btn-p" onClick={()=>handleSubmit(mi)} style={{background:isAT?'var(--bl)':undefined}}><MI n="search"/></button></div></div>):(<div><div id="qr-scanner-region" style={{width:'100%',minHeight:280,borderRadius:10,overflow:'hidden'}}></div><button className="btn btn-s" onClick={stop} style={{width:'100%',marginTop:8}}><MI n="close"/>Fechar câmera</button></div>)}
     </div></div></div>);
@@ -469,25 +476,32 @@ function App(){
 
   // === QR DATA PARSER ===
   const parseQRData=useCallback((raw)=>{
-    const r={at:null,driverId:null,driverName:null,qty:null,vehicleType:null,plate:null,raw:raw};
-    // AT code: AT followed by digits and optional suffix letters
-    const atM=raw.match(/AT\d{8,}\w*/i);if(atM)r.at=atM[0];
+    const r={at:null,driverId:null,driverName:null,qty:null,vehicleType:null,plate:null,districts:null,raw:raw};
+    // AT code: AT followed by digits and optional suffix letters (e.g. AT20260903594EM)
+    const atM=raw.match(/AT\d{6,}\w*/i);if(atM)r.at=atM[0].toUpperCase();
+    // Quantity: "Number of forward orders: 90" or "90 Pedidos"
+    const qM=raw.match(/(?:Number of (?:forward )?orders|forward orders)[:\s]*(\d+)/i);
+    if(qM)r.qty=parseInt(qM[1]);
+    if(!r.qty){const qM2=raw.match(/(\d+)\s*Pedidos/i);if(qM2)r.qty=parseInt(qM2[1]);}
     // Driver ID from [123456] pattern
     const dbM=raw.match(/\[(\d{4,})\]/);if(dbM)r.driverId=dbM[1];
     // Driver name after bracket
     const nmM=raw.match(/\[\d+\]\s*([A-ZÀ-Ú][A-ZÀ-Ú\s]{3,})/);if(nmM)r.driverName=nmM[1].trim();
-    // Quantity
-    const qM=raw.match(/(?:Number of (?:forward )?orders|Pedidos)[:\s]*(\d+)/i);if(qM)r.qty=parseInt(qM[1]);
-    // Vehicle type (from barcode screen info)
-    const vtM=raw.match(/(?:Tipo do ve[ií]culo|vehicle type)[:\s]*(\w+)/i);if(vtM)r.vehicleType=vtM[1].toUpperCase();
+    // Driver field in QR
+    const drM=raw.match(/(?:Driver|Motorista)[:\s]*\[?(\d{4,})\]?\s*([A-ZÀ-Ú][A-ZÀ-Ú\s]*)/i);
+    if(drM){if(!r.driverId)r.driverId=drM[1];if(!r.driverName)r.driverName=drM[2].trim();}
+    // Districts
+    const distM=raw.match(/District[:\s]*([\d.,\s]+)/i);if(distM)r.districts=distM[1].trim();
+    // Vehicle type
+    const vtM=raw.match(/(?:Tipo do ve[ií]culo|vehicle type|Final Wheel Type)[:\s]*(\w+)/i);if(vtM)r.vehicleType=vtM[1].toUpperCase();
     // Plate
     const plM=raw.match(/(?:Placa|plate)[:\s]*([A-Z0-9]{6,8})/i);if(plM)r.plate=plM[1].toUpperCase();
-    // Fallback: if starts with AT
-    if(!r.at&&raw.toUpperCase().startsWith('AT'))r.at=raw.split(/[\s\n]/)[0];
-    // Fallback: standalone 6-7 digit number as driver ID
+    // Fallback: if raw starts with AT
+    if(!r.at&&raw.toUpperCase().startsWith('AT'))r.at=raw.split(/[\s\n]/)[0].toUpperCase();
+    // Fallback for barcode: if raw is purely numeric (driver barcode = just the ID)
+    if(!r.driverId&&/^\d{4,8}$/.test(raw.trim()))r.driverId=raw.trim();
+    // Fallback: find standalone 6-7 digit number
     if(!r.driverId){const nm=raw.match(/\b(\d{6,7})\b/);if(nm)r.driverId=nm[1];}
-    // Fallback: name in ALL CAPS at start of text
-    if(!r.driverName){const capM=raw.match(/^([A-ZÀ-Ú][A-ZÀ-Ú\s]{5,})\n/m);if(capM)r.driverName=capM[1].trim();}
     return r;
   },[]);
 
