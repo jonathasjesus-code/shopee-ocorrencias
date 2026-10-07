@@ -310,12 +310,11 @@ function QRScanner({onScan,onClose,mode}){
   useEffect(()=>{mountedRef.current=true;return()=>{mountedRef.current=false;if(hRef.current){try{hRef.current.stop().then(()=>{try{hRef.current.clear();}catch(e){}}).catch(()=>{try{hRef.current.clear();}catch(e){}});}catch(e){}};};},[]);
   const start=useCallback(()=>{setScanning(true);setTimeout(()=>{const el=document.getElementById('qr-scanner-region');if(!el||!window.Html5Qrcode){setScanning(false);return;}try{
       // Configure formats: QR for AT mode, barcodes for Driver mode
-      const formats=isAT
-        ?[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.DATA_MATRIX]
-        :[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.ITF,Html5QrcodeSupportedFormats.QR_CODE];
+      // Both modes support QR + Barcode (AT label has both a barcode and a QR)
+      const formats=[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.DATA_MATRIX,Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.ITF];
       const scanner=new Html5Qrcode("qr-scanner-region",{formatsToSupport:formats,verbose:false});
       hRef.current=scanner;
-      scanner.start({facingMode:"environment"},{fps:15,qrbox:isAT?{width:250,height:250}:{width:280,height:150},aspectRatio:isAT?1.0:1.5},(t)=>{scanner.stop().then(()=>{try{scanner.clear();}catch(e){}}).catch(()=>{});hRef.current=null;if(mountedRef.current){setScanning(false);setScanResult(t);}},()=>{}).catch((e)=>{console.warn('Scan err:',e);if(mountedRef.current)setScanning(false);});}catch(e){console.warn('Init err:',e);if(mountedRef.current)setScanning(false);}},500);},[isAT]);
+      scanner.start({facingMode:"environment"},{fps:15,qrbox:{width:250,height:250},aspectRatio:1.0},(t)=>{scanner.stop().then(()=>{try{scanner.clear();}catch(e){}}).catch(()=>{});hRef.current=null;if(mountedRef.current){setScanning(false);setScanResult(t);}},()=>{}).catch((e)=>{console.warn('Scan err:',e);if(mountedRef.current)setScanning(false);});}catch(e){console.warn('Init err:',e);if(mountedRef.current)setScanning(false);}},500);},[isAT]);
   const stop=useCallback(()=>{if(hRef.current){try{hRef.current.stop().then(()=>{try{hRef.current.clear();}catch(e){}}).catch(()=>{try{hRef.current.clear();}catch(e){}});}catch(e){}hRef.current=null;}setScanning(false);},[]);
   const handleSubmit=useCallback((val)=>{if(!val||!val.trim())return;stop();setTimeout(()=>onScan(val.trim()),100);},[onScan,stop]);
   useEffect(()=>{if(scanResult){handleSubmit(scanResult);setScanResult('');}},[scanResult,handleSubmit]);
@@ -353,7 +352,8 @@ function DriverCard({driver,scanInfo}){
 // === SCANNED INFO CARD (for AT) ===
 function ScanInfoCard({info}){
   if(!info)return null;
-  return(<div className="scan-info"><div style={{fontWeight:700,fontSize:13,display:'flex',alignItems:'center',gap:6}}><MI n="qr_code" s={{color:'var(--sh)',fontSize:18}}/>Informações Escaneadas</div>
+  const hasExtras=info.qty||info.driverName||info.driverId||info.vehicleType||info.plate||info.districts;
+  return(<div className="scan-info"><div style={{fontWeight:700,fontSize:13,display:'flex',alignItems:'center',gap:6,marginBottom:8}}><MI n="qr_code" s={{color:'var(--sh)',fontSize:18}}/>Informações Escaneadas</div>
     <div className="scan-info-grid">
       {info.at&&<div className="scan-info-item"><div className="scan-info-label">Código AT</div><div className="scan-info-val" style={{fontFamily:'monospace',fontSize:12}}>{info.at}</div></div>}
       {info.qty!=null&&<div className="scan-info-item"><div className="scan-info-label">Pacotes</div><div className="scan-info-val" style={{color:info.qty>100?'var(--rd)':info.qty<30?'var(--yl)':'var(--gn)'}}>{info.qty}</div></div>}
@@ -362,6 +362,11 @@ function ScanInfoCard({info}){
       {info.vehicleType&&<div className="scan-info-item"><div className="scan-info-label">Veículo</div><div className="scan-info-val">{info.vehicleType}</div></div>}
       {info.plate&&<div className="scan-info-item"><div className="scan-info-label">Placa</div><div className="scan-info-val" style={{fontFamily:'monospace'}}>{info.plate}</div></div>}
     </div>
+    <details style={{marginTop:8}}>
+      <summary style={{fontSize:10,color:'var(--g400)',cursor:'pointer',fontWeight:600}}>📋 Ver conteúdo bruto escaneado</summary>
+      <pre style={{marginTop:6,padding:10,background:'var(--g100)',borderRadius:6,fontSize:9,whiteSpace:'pre-wrap',wordBreak:'break-all',color:'var(--g600)',maxHeight:120,overflowY:'auto',fontFamily:'Courier New,monospace'}}>{info.raw}</pre>
+      {!hasExtras&&<div style={{marginTop:6,padding:8,background:'var(--yl1)',borderRadius:6,fontSize:10,color:'#92400E'}}><MI n="info" s={{fontSize:12,verticalAlign:'middle'}}/> O QR/barcode lido contém apenas a AT. Os campos pacotes, driver e nome devem ser preenchidos manualmente ou escaneando o QR Code separadamente.</div>}
+    </details>
   </div>);
 }
 
@@ -479,10 +484,16 @@ function App(){
     const r={at:null,driverId:null,driverName:null,qty:null,vehicleType:null,plate:null,districts:null,raw:raw};
     // AT code: AT followed by digits and optional suffix letters (e.g. AT20260903594EM)
     const atM=raw.match(/AT\d{6,}\w*/i);if(atM)r.at=atM[0].toUpperCase();
-    // Quantity: "Number of forward orders: 90" or "90 Pedidos"
-    const qM=raw.match(/(?:Number of (?:forward )?orders|forward orders)[:\s]*(\d+)/i);
+    // Quantity: multiple patterns for different QR formats
+    // Pattern 1: "Number of orders 90" or "Number of forward orders: 90"
+    const qM=raw.match(/Number of (?:forward )?orders[:\s]*(\d+)/i);
     if(qM)r.qty=parseInt(qM[1]);
+    // Pattern 2: "90 Pedidos"
     if(!r.qty){const qM2=raw.match(/(\d+)\s*Pedidos/i);if(qM2)r.qty=parseInt(qM2[1]);}
+    // Pattern 3: "orders 90" or "orders:90"
+    if(!r.qty){const qM3=raw.match(/orders[:\s]+(\d{1,4})\b/i);if(qM3)r.qty=parseInt(qM3[1]);}
+    // Pattern 4: "forward: 90" or "fwd: 90"
+    if(!r.qty){const qM4=raw.match(/(?:forward|fwd)[:\s]+(\d{1,4})\b/i);if(qM4)r.qty=parseInt(qM4[1]);}
     // Driver ID from [123456] pattern
     const dbM=raw.match(/\[(\d{4,})\]/);if(dbM)r.driverId=dbM[1];
     // Driver name after bracket
@@ -517,12 +528,14 @@ function App(){
       // Fill quantity
       if(parsed.qty){setQtd(String(parsed.qty));toast(`📦 ${parsed.qty} pacotes detectados`);}
       else{
-        // Extra fallback: try to find any number between 1-999 that could be qty
-        const anyQty=cleaned.match(/(?:orders|pedidos|pkgs)[:\s]*(\d{1,3})\b/i);
-        if(anyQty){setQtd(anyQty[1]);toast(`📦 ${anyQty[1]} pacotes detectados`);}
-        // Also try "N forward" pattern
-        const fwdQty=cleaned.match(/(\d{1,3})\s*(?:forward|pedidos)/i);
-        if(!anyQty&&fwdQty){setQtd(fwdQty[1]);toast(`📦 ${fwdQty[1]} pacotes detectados`);}
+        // Extra fallback: try multiple patterns for qty in raw text
+        const qtyPatterns=[
+          /orders[:\s]+(\d{1,4})/i,
+          /(\d{1,4})\s*(?:pedidos|pacotes|pkgs|orders)/i,
+          /(?:forward|fwd)[:\s]+(\d{1,4})/i,
+          /(?:qty|quantidade)[:\s]+(\d{1,4})/i
+        ];
+        for(const p of qtyPatterns){const m=cleaned.match(p);if(m){setQtd(m[1]);toast(`📦 ${m[1]} pacotes detectados`);break;}}
       }
       // Fill driver if found in QR
       if(parsed.driverId){
@@ -618,7 +631,7 @@ function App(){
               {filtD.length>0&&!selDriver&&(<div style={{background:theme==='dark'?'var(--g100)':'#fff',border:'1px solid var(--g200)',borderRadius:8,marginTop:3,boxShadow:'0 4px 12px rgba(0,0,0,.08)',maxHeight:160,overflowY:'auto'}}>{filtD.map(d=>(<div key={d.driver_id} onClick={()=>{setSelDriver(d);setDSearch(d.driver_id);}} style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid var(--g100)',display:'flex',justifyContent:'space-between',alignItems:'center'}} onMouseOver={e=>e.currentTarget.style.background='var(--o50)'} onMouseOut={e=>e.currentTarget.style.background=theme==='dark'?'var(--g100)':'#fff'}><div><div style={{fontWeight:600,fontSize:12}}>{d.name}</div><div style={{fontSize:10,color:'var(--g500)'}}>ID: {d.driver_id} • {d.hub}</div></div><span className="bd bd-o">W{d.wave}</span></div>))}</div>)}
             </div>
             <DriverCard driver={selDriver} scanInfo={scanInfo}/>
-            {scanInfo&&scanInfo.at&&<ScanInfoCard info={scanInfo}/>}
+            {scanInfo&&(scanInfo.at||scanInfo.driverId)&&<ScanInfoCard info={scanInfo}/>}
             <div className="fg"><label className="fl">Código AT</label><input className="fi" placeholder="AT20260903994EM" value={atCode} onChange={e=>setAtCode(e.target.value)} style={{fontFamily:'monospace'}}/></div>
           </div>
         </div>
