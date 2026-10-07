@@ -511,9 +511,25 @@ function App(){
     setScanInfo(parsed); // always save scan info
 
     if(scanMode==='at'){
+      // Log raw scan content for debugging
+      console.log('AT SCAN RAW:',cleaned);console.log('PARSED:',JSON.stringify(parsed));
       if(parsed.at){setAtCode(parsed.at);toast(`AT: ${parsed.at}`);}else{setAtCode(cleaned);toast(`AT: ${cleaned}`,'info');}
-      if(parsed.qty){setQtd(String(parsed.qty));}
-      if(parsed.driverId){const f=drivers.find(d=>d.driver_id===parsed.driverId);if(f){setSelDriver(f);setDSearch(f.driver_id);}}
+      // Fill quantity
+      if(parsed.qty){setQtd(String(parsed.qty));toast(`📦 ${parsed.qty} pacotes detectados`);}
+      else{
+        // Extra fallback: try to find any number between 1-999 that could be qty
+        const anyQty=cleaned.match(/(?:orders|pedidos|pkgs)[:\s]*(\d{1,3})\b/i);
+        if(anyQty){setQtd(anyQty[1]);toast(`📦 ${anyQty[1]} pacotes detectados`);}
+        // Also try "N forward" pattern
+        const fwdQty=cleaned.match(/(\d{1,3})\s*(?:forward|pedidos)/i);
+        if(!anyQty&&fwdQty){setQtd(fwdQty[1]);toast(`📦 ${fwdQty[1]} pacotes detectados`);}
+      }
+      // Fill driver if found in QR
+      if(parsed.driverId){
+        const f=drivers.find(d=>d.driver_id===parsed.driverId);
+        if(f){setSelDriver(f);setDSearch(f.driver_id);toast(`Driver: ${f.name}`);}
+        else{setDSearch(parsed.driverId);toast(`Driver ID: ${parsed.driverId} (não na base local)`,'info');}
+      }
     } else {
       // Driver mode - barcode typically just contains the ID number
       const did=parsed.driverId||cleaned.replace(/\D/g,'');
@@ -620,8 +636,9 @@ function App(){
             <div className="fg"><label className="fl">Analista responsável</label>
               <div className="analyst-select">
                 <button className={`analyst-chip ${selAnalyst===''?'sel':''}`} onClick={()=>setSelAnalyst('')}><MI n="person" s={{fontSize:14}}/>Eu ({user?.name?.split(' ')[0]})</button>
-                {hubAnalysts.filter(a=>a.email!==user?.email).map(a=>(<button key={a.email} className={`analyst-chip ${selAnalyst===a.email?'sel':''}`} onClick={()=>setSelAnalyst(a.email)}><MI n="person_outline" s={{fontSize:14}}/>{a.name||a.email.split('@')[0]}</button>))}
+                {adminUsers.filter(a=>a.active!==false&&a.email!==user?.email).map(a=>(<button key={a.email} className={`analyst-chip ${selAnalyst===a.email?'sel':''}`} onClick={()=>setSelAnalyst(a.email)}><MI n="person_outline" s={{fontSize:14}}/>{a.name||a.email.split('@')[0]} <span style={{fontSize:9,opacity:.7}}>({a.hub})</span></button>))}
               </div>
+              {adminUsers.filter(a=>a.active!==false&&a.email!==user?.email).length===0&&<div style={{fontSize:10,color:'var(--g400)',marginTop:4}}><MI n="info" s={{fontSize:12,verticalAlign:'middle'}}/> Adicione analistas no painel Admin (⚙️) para selecionar outro responsável</div>}
             </div>
             <div className="fg"><label className="fl">Qtd Pacotes *</label><input className="fi" type="number" placeholder="Ex: 45" value={qtd} onChange={e=>setQtd(e.target.value)}/>{qtd&&<div className={`qi ${qC(qtd)}`}><MI n={qC(qtd)==='no'?'check_circle':'warning'} s={{fontSize:16}}/>{qM(qtd)}</div>}</div>
             <div className="fg"><label className="fl">Tipo *</label><select className="fs" value={ocType} onChange={e=>setOcType(e.target.value)}><option value="">Selecione...</option>{OC_TYPES.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
