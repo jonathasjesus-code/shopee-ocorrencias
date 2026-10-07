@@ -15,6 +15,8 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
 <style>
 :root{--sh:#EE4D2D;--shd:#D73211;--shl:#FF6633;--o50:#FFF5F2;--o100:#FFE8E0;--o200:#FFD0C0;--o300:#FFB099;--o400:#FF8866;--o700:#B02A0E;--g50:#F9FAFB;--g100:#F3F4F6;--g200:#E5E7EB;--g300:#D1D5DB;--g400:#9CA3AF;--g500:#6B7280;--g600:#4B5563;--g700:#374151;--g800:#1F2937;--g900:#111827;--gn:#22C55E;--gn1:#DCFCE7;--rd:#EF4444;--rd1:#FEE2E2;--yl:#F59E0B;--yl1:#FEF3C7;--bl:#3B82F6;--bl1:#DBEAFE;--r:12px;--rs:8px;--rl:16px}
 [data-theme=dark]{--g50:#111827;--g100:#1F2937;--g200:#374151;--g300:#4B5563;--g400:#6B7280;--g500:#9CA3AF;--g600:#D1D5DB;--g700:#E5E7EB;--g800:#F3F4F6;--g900:#F9FAFB;--o50:#1a0f0c;--o100:#2d1a14;--o200:#442518;--o300:#5c3020;--bl1:#1e2a3d;--gn1:#132a1a;--rd1:#2d1515;--yl1:#2d2511}
@@ -230,6 +232,12 @@ tr:hover td{background:var(--o50)}
 .analyst-chip.sel{border-color:var(--sh);background:var(--sh);color:#fff}
 .analyst-chip .mi{font-size:14px}
 @media(max-width:768px){.user-row{gap:6px;padding:8px 10px}.user-email{min-width:auto;font-size:11px}}
+
+.ocr-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:600;display:flex;align-items:center;justify-content:center;padding:16px;animation:fadeIn .2s ease-out}
+.ocr-card{background:#fff;border-radius:var(--rl);max-width:500px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 40px rgba(0,0,0,.2);animation:scaleIn .3s ease-out;padding:24px;text-align:center}
+.ocr-progress{width:100%;height:6px;background:var(--g200);border-radius:3px;margin:12px 0;overflow:hidden}
+.ocr-progress-bar{height:100%;background:var(--sh);border-radius:3px;transition:width .3s ease}
+.ocr-preview{max-width:100%;max-height:200px;border-radius:8px;margin:12px 0;object-fit:contain;border:2px solid var(--g200)}
 </style>
 </head>
 <body>
@@ -563,8 +571,73 @@ function App(){
     }
   },[drivers,toast,scanMode,parseQRData]);
 
-  const fRef=useRef(null);
-  const handleImg=useCallback((e)=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onloadend=()=>setImg(r.result);r.readAsDataURL(f);}},[]);
+  const fRef=useRef(null);const ocrRef=useRef(null);
+  const[ocrProcessing,setOcrProcessing]=useState(false);const[ocrProgress,setOcrProgress]=useState(0);const[ocrPreview,setOcrPreview]=useState(null);
+
+  // === OCR: Photo of label → extract text → parse ===
+  const handleOCRPhoto=useCallback(async(e)=>{
+    const file=e.target.files?.[0];if(!file)return;
+    // Show preview
+    const url=URL.createObjectURL(file);setOcrPreview(url);setOcrProcessing(true);setOcrProgress(0);
+    try{
+      if(!window.Tesseract){toast('Carregando OCR...','info');await new Promise(r=>setTimeout(r,1000));}
+      const worker=await Tesseract.createWorker('eng',1,{
+        logger:m=>{if(m.status==='recognizing text'&&m.progress)setOcrProgress(Math.round(m.progress*100));}
+      });
+      const{data:{text}}=await worker.recognize(file);
+      await worker.terminate();
+      console.log('OCR TEXT:',text);
+      // Parse the OCR text using the same parser
+      const parsed=parseQRData(text);
+      setScanInfo(parsed);
+      // Fill fields
+      if(parsed.at){setAtCode(parsed.at);toast(`AT: ${parsed.at}`);}
+      if(parsed.qty){setQtd(String(parsed.qty));toast(`📦 ${parsed.qty} pacotes`);}
+      if(parsed.driverId){
+        const f=drivers.find(d=>d.driver_id===parsed.driverId);
+        if(f){setSelDriver(f);setDSearch(f.driver_id);toast(`Driver: ${f.name}`);}
+        else{setDSearch(parsed.driverId);toast(`Driver ID: ${parsed.driverId}`,'info');}
+      }
+      if(parsed.driverName&&!parsed.driverId){toast(`Motorista: ${parsed.driverName}`,'info');}
+      if(!parsed.at&&!parsed.qty&&!parsed.driverId){toast('Não foi possível extrair dados da foto. Tente com melhor iluminação.','error');}
+    }catch(err){console.error('OCR error:',err);toast('Erro no OCR: '+err.message,'error');}
+    finally{setOcrProcessing(false);setOcrProgress(0);URL.revokeObjectURL(url);setOcrPreview(null);if(ocrRef.current)ocrRef.current.value='';}
+  },[drivers,toast,parseQRData]);
+  const handleImg=useCallback(async(e)=>{
+    const file=e.target.files?.[0];if(!file)return;
+    // Set image preview
+    const reader=new FileReader();
+    reader.onloadend=()=>setImg(reader.result);
+    reader.readAsDataURL(file);
+    // Run OCR on the evidence photo to extract data
+    setOcrProcessing(true);setOcrProgress(0);
+    try{
+      const worker=await Tesseract.createWorker('eng',1,{
+        logger:m=>{if(m.status==='recognizing text'&&m.progress)setOcrProgress(Math.round(m.progress*100));}
+      });
+      const{data:{text}}=await worker.recognize(file);
+      await worker.terminate();
+      console.log('EVIDENCE OCR:',text);
+      const parsed=parseQRData(text);
+      let filled=[];
+      // Auto-fill AT if found and field is empty
+      if(parsed.at&&!atCode){setAtCode(parsed.at);filled.push(`AT: ${parsed.at}`);}
+      // Auto-fill quantity if found and field is empty
+      if(parsed.qty&&!qtd){setQtd(String(parsed.qty));filled.push(`📦 ${parsed.qty} pacotes`);}
+      // Auto-fill driver if found and no driver selected
+      if(parsed.driverId&&!selDriver){
+        const f=drivers.find(d=>d.driver_id===parsed.driverId);
+        if(f){setSelDriver(f);setDSearch(f.driver_id);filled.push(`Driver: ${f.name}`);}
+        else{setDSearch(parsed.driverId);filled.push(`Driver ID: ${parsed.driverId}`);}
+      }
+      if(parsed.driverName&&!selDriver&&!parsed.driverId){filled.push(`Motorista: ${parsed.driverName}`);}
+      // Update scanInfo with OCR results
+      if(parsed.at||parsed.qty||parsed.driverId)setScanInfo(prev=>({...(prev||{}),raw:text,...(parsed.at?{at:parsed.at}:{}),...(parsed.qty?{qty:parsed.qty}:{}),...(parsed.driverId?{driverId:parsed.driverId}:{}),...(parsed.driverName?{driverName:parsed.driverName}:{})}));
+      if(filled.length>0)toast(`📷 Foto: ${filled.join(' • ')}`,'success');
+      else toast('📷 Foto salva como evidência','info');
+    }catch(err){console.warn('Evidence OCR error:',err);toast('📷 Foto salva (OCR indisponível)','info');}
+    finally{setOcrProcessing(false);setOcrProgress(0);}
+  },[drivers,toast,parseQRData,atCode,qtd,selDriver]);
 
   const submit=useCallback(()=>{
     if(!selDriver&&!scanInfo?.driverId){toast('Selecione um driver','error');return;}
@@ -625,7 +698,7 @@ function App(){
       {/* NOVA */}
       {tab==='nova'&&(<div className="fade-in"><div className="two"><div>
         <div className="card" style={{marginBottom:14}}>
-          <div className="card-h"><h2><MI n="person_search"/>Driver</h2><div style={{display:'flex',gap:4}}><button className="btn btn-p btn-sm" onClick={()=>{setScanMode('driver');setShowScan('open');}}><MI n="qr_code_scanner"/>ID Driver</button><button className="btn btn-sm" style={{background:'var(--bl)',color:'#fff'}} onClick={()=>{setScanMode('at');setShowScan('open');}}><MI n="receipt_long"/>AT</button></div></div>
+          <div className="card-h"><h2><MI n="person_search"/>Driver</h2><div style={{display:'flex',gap:4,flexWrap:'wrap'}}><button className="btn btn-p btn-sm" onClick={()=>{setScanMode('driver');setShowScan('open');}}><MI n="qr_code_scanner"/>ID Driver</button><button className="btn btn-sm" style={{background:'var(--bl)',color:'#fff'}} onClick={()=>{setScanMode('at');setShowScan('open');}}><MI n="receipt_long"/>AT</button></div></div>
           <div className="card-b">
             <div className="fg"><label className="fl">Buscar Driver</label><div style={{display:'flex',gap:6}}><input className="fi" placeholder="ID, Nome ou Telefone..." value={dSearch} onChange={e=>setDSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')findDriver(dSearch);}}/><button className="btn btn-p" onClick={()=>findDriver(dSearch)}><MI n="search"/></button></div>
               {filtD.length>0&&!selDriver&&(<div style={{background:theme==='dark'?'var(--g100)':'#fff',border:'1px solid var(--g200)',borderRadius:8,marginTop:3,boxShadow:'0 4px 12px rgba(0,0,0,.08)',maxHeight:160,overflowY:'auto'}}>{filtD.map(d=>(<div key={d.driver_id} onClick={()=>{setSelDriver(d);setDSearch(d.driver_id);}} style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid var(--g100)',display:'flex',justifyContent:'space-between',alignItems:'center'}} onMouseOver={e=>e.currentTarget.style.background='var(--o50)'} onMouseOut={e=>e.currentTarget.style.background=theme==='dark'?'var(--g100)':'#fff'}><div><div style={{fontWeight:600,fontSize:12}}>{d.name}</div><div style={{fontSize:10,color:'var(--g500)'}}>ID: {d.driver_id} • {d.hub}</div></div><span className="bd bd-o">W{d.wave}</span></div>))}</div>)}
@@ -658,7 +731,7 @@ function App(){
             <div className="fg"><label className="fl">Motivo *</label><div className="mot-g">{MOTIVOS.map(m=><button key={m} className={`mot ${motivo===m?'sel':''}`} onClick={()=>setMotivo(m)}>{m}</button>)}</div></div>
             <div className="fg"><label className="fl">Status</label><select className="fs" value={status} onChange={e=>setStatus(e.target.value)}><option value="Pendente">⏳ Pendente</option><option value="Em análise">🔍 Em análise</option><option value="OK">✅ Resolvido</option><option value="Escalado">🔴 Escalado</option></select></div>
             <div className="fg"><label className="fl">Observações</label><textarea className="ft" placeholder="Detalhes..." value={obs} onChange={e=>setObs(e.target.value)}/></div>
-            <div className="fg"><label className="fl">Evidência</label><div className={`up ${img?'has':''}`} onClick={()=>fRef.current?.click()}>{img?<img src={img} alt=""/>:<><MI n="cloud_upload"/><div style={{fontSize:12,fontWeight:600,color:'var(--g600)'}}>Upload</div></>}</div><input type="file" ref={fRef} accept="image/*" capture="environment" style={{display:'none'}} onChange={handleImg}/>{img&&<button className="btn btn-sm btn-s" onClick={()=>setImg(null)} style={{marginTop:4}}><MI n="delete"/>Remover</button>}</div>
+            <div className="fg"><label className="fl">Evidência (foto da etiqueta = preenche pacotes automaticamente)</label><div className={`up ${img?'has':''}`} onClick={()=>fRef.current?.click()}>{img?<img src={img} alt=""/>:<><MI n="photo_camera"/><div style={{fontSize:12,fontWeight:600,color:'var(--g600)'}}>📷 Tirar foto ou selecionar</div><div style={{fontSize:9,color:'var(--g400)'}}>A foto da etiqueta preenche AT e pacotes automaticamente</div></>}</div><input type="file" ref={fRef} accept="image/*" capture="environment" style={{display:'none'}} onChange={handleImg}/>{img&&<button className="btn btn-sm btn-s" onClick={()=>setImg(null)} style={{marginTop:4}}><MI n="delete"/>Remover</button>}</div>
             {geo&&<div style={{fontSize:10,color:'var(--g400)',display:'flex',alignItems:'center',gap:4,marginBottom:6}}><MI n="location_on" s={{fontSize:12}}/>{geo.lat.toFixed(4)}, {geo.lng.toFixed(4)}</div>}
             <button className="btn btn-p btn-lg" onClick={submit} style={{width:'100%',marginTop:8}}><MI n="save"/>Registrar Ocorrência</button>
           </div>
@@ -701,6 +774,14 @@ function App(){
         onRemove={(i)=>{const email=adminUsers[i]?.email;if(email===DEFAULT_ADMIN){toast('Não pode remover o admin principal','error');return;}setAdminUsers(p=>p.filter((_,idx)=>idx!==i));toast('Removido');}}
       />)}
     </main>
+    {ocrProcessing&&(<div className="ocr-overlay"><div className="ocr-card">
+      <MI n="photo_camera" s={{fontSize:48,color:'var(--sh)',marginBottom:12}}/>
+      <h3 style={{fontSize:16,fontWeight:700,marginBottom:4}}>Lendo foto da etiqueta...</h3>
+      <p style={{fontSize:12,color:'var(--g500)',marginBottom:12}}>Extraindo AT, pacotes e driver</p>
+      {ocrPreview&&<img src={ocrPreview} className="ocr-preview" alt="Preview"/>}
+      <div className="ocr-progress"><div className="ocr-progress-bar" style={{width:`${ocrProgress}%`}}/></div>
+      <div style={{fontSize:11,color:'var(--g400)'}}>{ocrProgress}% processado</div>
+    </div></div>)}
     {showScan&&<QRScanner onScan={handleScan} onClose={()=>setShowScan('')} mode={scanMode}/>}
   </div>);
 }
