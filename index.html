@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#EE4D2D">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Shopee - Sistema de Ocorrências</title>
 <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiU2hvcGVlIE9jb3Jyw6puY2lhcyIsInNob3J0X25hbWUiOiJPY29ycsOqbmNpYXMiLCJzdGFydF91cmwiOiIuIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiI0ZGRkZGRiIsInRoZW1lX2NvbG9yIjoiI0VFNEQyRCJ9">
@@ -447,7 +447,7 @@ function SyncPanel({adminUsers,setAdminUsers,toast}){
 }
 
 // === ADMIN PANEL ===
-function AdminPanel({users,onUpdate,onAdd,onRemove,currentUser}){
+function AdminPanel({users,onUpdate,onAdd,onRemove,currentUser,onSync,toast:toastFn}){
   const[newEmail,setNewEmail]=useState('');const[newHub,setNewHub]=useState('VG');
   const addUser=()=>{if(!newEmail.includes('@')){return;}onAdd({email:newEmail,name:newEmail.split('@')[0],hub:newHub,role:'analyst',active:true});setNewEmail('');};
   return(<div className="admin-panel fade-in">
@@ -456,7 +456,7 @@ function AdminPanel({users,onUpdate,onAdd,onRemove,currentUser}){
       <div className="card-b">
         <div style={{background:'var(--bl1)',padding:12,borderRadius:8,marginBottom:14}}>
           <div style={{fontWeight:700,fontSize:12,marginBottom:8,display:'flex',alignItems:'center',gap:6}}><MI n="sync" s={{fontSize:16,color:'var(--bl)'}}/>Sincronizar Analistas entre Dispositivos</div>
-          <SyncPanel adminUsers={adminUsers} setAdminUsers={setAdminUsers} toast={toast}/>
+          <SyncPanel adminUsers={users} setAdminUsers={onSync} toast={toastFn}/>
         </div>
         <h3 style={{fontSize:13,marginBottom:12}}>Adicionar Analista</h3>
         <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
@@ -881,6 +881,7 @@ function App(){
         onUpdate={(i,u)=>setAdminUsers(p=>{const n=[...p];n[i]=u;return n;})}
         onAdd={(u)=>{if(adminUsers.find(a=>a.email===u.email)){toast('Email já cadastrado','error');return;}setAdminUsers(p=>[...p,u]);toast(`${u.email} adicionado!`);}}
         onRemove={(i)=>{const email=adminUsers[i]?.email;if(email===DEFAULT_ADMIN){toast('Não pode remover o admin principal','error');return;}setAdminUsers(p=>p.filter((_,idx)=>idx!==i));toast('Removido');}}
+        onSync={setAdminUsers} toast={toast}
       />)}
     </main>
     {ocrProcessing&&(<div className="ocr-overlay"><div className="ocr-card">
