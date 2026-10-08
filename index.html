@@ -461,6 +461,7 @@ function App(){
   useEffect(()=>{(async()=>{
     const su=await SS.load('_user');if(su&&su.email){const dom=su.email.split('@')[1];if(ALLOWED_DOMAINS.includes(dom))setUser(su);else SS.remove('_user');}setAuthLoading(false);
     const so=await SS.load('_ocs');setOcs(so||[]);setOcsLoaded(true);
+    // Note: history/dashboard will show all hubs but can be filtered
     const sa=await SS.load('_admin_users');
     if(sa&&sa.length>0){setAdminUsers(sa);}else{setAdminUsers([{email:DEFAULT_ADMIN,name:'Jonathas Jesus',hub:'GRU',role:'admin',active:true}]);}
     setAdminLoaded(true);
@@ -720,18 +721,18 @@ function App(){
           <div className="card-h"><h2><MI n="warning_amber"/>Ocorrência</h2></div>
           <div className="card-b">
             <div className="fg"><label className="fl">Analista responsável</label>
-              <div className="analyst-select">
-                <button className={`analyst-chip ${selAnalyst===''?'sel':''}`} onClick={()=>setSelAnalyst('')}><MI n="person" s={{fontSize:14}}/>Eu ({user?.name?.split(' ')[0]})</button>
-                {adminUsers.filter(a=>a.active!==false&&a.email!==user?.email).map(a=>(<button key={a.email} className={`analyst-chip ${selAnalyst===a.email?'sel':''}`} onClick={()=>setSelAnalyst(a.email)}><MI n="person_outline" s={{fontSize:14}}/>{a.name||a.email.split('@')[0]} <span style={{fontSize:9,opacity:.7}}>({a.hub})</span></button>))}
-              </div>
-              {adminUsers.filter(a=>a.active!==false&&a.email!==user?.email).length===0&&<div style={{fontSize:10,color:'var(--g400)',marginTop:4}}><MI n="info" s={{fontSize:12,verticalAlign:'middle'}}/> Adicione analistas no painel Admin (⚙️) para selecionar outro responsável</div>}
+              <select className="fs" value={selAnalyst} onChange={e=>setSelAnalyst(e.target.value)}>
+                <option value="">👤 Eu ({user?.name?.split(' ')[0]||user?.email})</option>
+                {hubAnalysts.filter(a=>a.active!==false&&a.email!==user?.email).map(a=>(<option key={a.email} value={a.email}>👤 {a.name||a.email.split('@')[0]}</option>))}
+              </select>
+              {selAnalyst&&<div style={{fontSize:10,color:'var(--sh)',marginTop:4,fontWeight:600}}><MI n="swap_horiz" s={{fontSize:12,verticalAlign:'middle'}}/> Registrando para: {adminUsers.find(a=>a.email===selAnalyst)?.name||selAnalyst}</div>}
             </div>
             <div className="fg"><label className="fl">Qtd Pacotes *</label><input className="fi" type="number" placeholder="Ex: 45" value={qtd} onChange={e=>setQtd(e.target.value)}/>{qtd&&<div className={`qi ${qC(qtd)}`}><MI n={qC(qtd)==='no'?'check_circle':'warning'} s={{fontSize:16}}/>{qM(qtd)}</div>}</div>
             <div className="fg"><label className="fl">Tipo *</label><select className="fs" value={ocType} onChange={e=>setOcType(e.target.value)}><option value="">Selecione...</option>{OC_TYPES.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
             <div className="fg"><label className="fl">Motivo *</label><div className="mot-g">{MOTIVOS.map(m=><button key={m} className={`mot ${motivo===m?'sel':''}`} onClick={()=>setMotivo(m)}>{m}</button>)}</div></div>
             <div className="fg"><label className="fl">Status</label><select className="fs" value={status} onChange={e=>setStatus(e.target.value)}><option value="Pendente">⏳ Pendente</option><option value="Em análise">🔍 Em análise</option><option value="OK">✅ Resolvido</option><option value="Escalado">🔴 Escalado</option></select></div>
             <div className="fg"><label className="fl">Observações</label><textarea className="ft" placeholder="Detalhes..." value={obs} onChange={e=>setObs(e.target.value)}/></div>
-            <div className="fg"><label className="fl">Evidência (foto da etiqueta = preenche pacotes automaticamente)</label><div className={`up ${img?'has':''}`} onClick={()=>fRef.current?.click()}>{img?<img src={img} alt=""/>:<><MI n="photo_camera"/><div style={{fontSize:12,fontWeight:600,color:'var(--g600)'}}>📷 Tirar foto ou selecionar</div><div style={{fontSize:9,color:'var(--g400)'}}>A foto da etiqueta preenche AT e pacotes automaticamente</div></>}</div><input type="file" ref={fRef} accept="image/*" capture="environment" style={{display:'none'}} onChange={handleImg}/>{img&&<button className="btn btn-sm btn-s" onClick={()=>setImg(null)} style={{marginTop:4}}><MI n="delete"/>Remover</button>}</div>
+            <div className="fg"><label className="fl">Evidência (foto da etiqueta = preenche pacotes automaticamente)</label><div className={`up ${img?'has':''}`} onClick={()=>fRef.current?.click()}>{img?<img src={img} alt=""/>:<><MI n="photo_camera"/><div style={{fontSize:12,fontWeight:600,color:'var(--g600)'}}>📷 Tirar foto ou selecionar</div><div style={{fontSize:9,color:'var(--g400)'}}>A foto da etiqueta preenche AT e pacotes automaticamente</div></>}</div><input type="file" ref={fRef} accept="image/*" style={{display:'none'}} onChange={handleImg}/>{img&&<button className="btn btn-sm btn-s" onClick={()=>setImg(null)} style={{marginTop:4}}><MI n="delete"/>Remover</button>}</div>
             {geo&&<div style={{fontSize:10,color:'var(--g400)',display:'flex',alignItems:'center',gap:4,marginBottom:6}}><MI n="location_on" s={{fontSize:12}}/>{geo.lat.toFixed(4)}, {geo.lng.toFixed(4)}</div>}
             <button className="btn btn-p btn-lg" onClick={submit} style={{width:'100%',marginTop:8}}><MI n="save"/>Registrar Ocorrência</button>
           </div>
