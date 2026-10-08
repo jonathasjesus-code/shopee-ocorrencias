@@ -238,6 +238,13 @@ tr:hover td{background:var(--o50)}
 .ocr-progress{width:100%;height:6px;background:var(--g200);border-radius:3px;margin:12px 0;overflow:hidden}
 .ocr-progress-bar{height:100%;background:var(--sh);border-radius:3px;transition:width .3s ease}
 .ocr-preview{max-width:100%;max-height:200px;border-radius:8px;margin:12px 0;object-fit:contain;border:2px solid var(--g200)}
+
+.qf-modal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);z-index:550;display:flex;align-items:flex-end;justify-content:center;padding:0;animation:fadeIn .2s}
+.qf-card{background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:500px;padding:20px;box-shadow:0 -10px 30px rgba(0,0,0,.2);animation:slideUp .3s ease-out}
+.qf-img{width:100%;max-height:150px;object-fit:contain;border-radius:8px;margin-bottom:12px;background:var(--g100)}
+.qf-input{width:100%;padding:16px;border:3px solid var(--sh);border-radius:12px;font-size:24px;font-weight:800;text-align:center;font-family:inherit;outline:none;color:var(--sh)}
+.qf-input::placeholder{color:var(--g300);font-weight:400;font-size:16px}
+@media(min-width:769px){.qf-card{border-radius:16px;margin-bottom:20px}}
 </style>
 </head>
 <body>
@@ -275,7 +282,8 @@ const SS={
 const ALLOWED_DOMAINS=['shopee.com','shopeemobile-external.com'];
 const GOOGLE_CLIENT_ID='810891479912-5v0391ia5104a1hlmc5cvqrtidt72uor.apps.googleusercontent.com';
 const HUBS=['VG','GRU','LAPA','MOOCA'];
-const MOTIVOS=['Dobradinha','Alocado','Nuvem','Volumoso','Driver não quis misturar','Poucos pacotes','Pacote sem etiqueta','Pacote danificado','Rota divergente','Veículo incompatível','Baú pequeno','Excesso de peso','Endereço incorreto','Problema mecânico','No Show','Atraso','Outro'];
+const MOTIVOS=['Dobradinha','Alocado','Nuvem','Volumoso','Driver não quis misturar','Poucos pacotes','Pacote sem etiqueta','Pacote danificado','Rota divergente','Veículo incompatível','Baú pequeno','Excesso de peso','Endereço incorreto','Problema mecânico','No Show','Atraso','Mistura Cluster','Cluster Bombeiro','NOK','Outro'];
+const DEVOL_MOTIVOS=['Endereço não encontrado','Cliente ausente','Recusa do destinatário','Pacote avariado','Tentativa sem sucesso (3x)','Área de risco','Endereço incorreto/incompleto','Fora da área de cobertura','Pedido cancelado','Pacote extraviado','Problema de acesso (condomínio)','Restrição de horário','Chuva/alagamento','Documento não apresentado','Outro'];
 const OC_TYPES=['Excesso de pacotes (>100)','Poucos pacotes (<30)','No Show','Recusa de carga','Veículo inadequado','Baú insuficiente','Problema no carregamento','Outro'];
 const PROFILES=[{id:'MOTO',icon:'🏍️',name:'Moto',desc:'Motocicleta com baú'},{id:'PASSEIO',icon:'🚗',name:'Passeio',desc:'Carro de passeio'},{id:'FIORINO',icon:'🚐',name:'Fiorino',desc:'Fiorino / Van'}];
 const BAUS=[{id:'bau-80',name:'Baú 80L',desc:'80L Pro Tork',capacity:'~25-30 pkgs'},{id:'bau-126',name:'Baú 126L',desc:'126L MN3',capacity:'~40-50 pkgs'},{id:'bau-modelo3',name:'Baú Grande',desc:'Expandido',capacity:'~60-80 pkgs'}];
@@ -496,7 +504,7 @@ function App(){
   const[tab,setTab]=useState('nova');const[toasts,setToasts]=useState([]);
   const[drivers]=useState(DEMO_DRIVERS);const[selDriver,setSelDriver]=useState(null);const[dSearch,setDSearch]=useState('');
   const[profile,setProfile]=useState('');const[selBau,setSelBau]=useState('');const[qtd,setQtd]=useState('');
-  const[motivo,setMotivo]=useState('');const[ocType,setOcType]=useState('');const[obs,setObs]=useState('');const[cluster,setCluster]=useState('');
+  const[motivo,setMotivo]=useState('');const[ocType,setOcType]=useState('');const[obs,setObs]=useState('');const[cluster,setCluster]=useState('');const[isOnhold,setIsOnhold]=useState(false);const[devolMotivo,setDevolMotivo]=useState('');
   const[atCode,setAtCode]=useState('');const[img,setImg]=useState(null);const[status,setStatus]=useState('Pendente');
   const[showScan,setShowScan]=useState('');const[scanMode,setScanMode]=useState('driver');
   const[scanInfo,setScanInfo]=useState(null); // extra info from barcode/QR
@@ -660,63 +668,52 @@ function App(){
     }catch(err){console.error('OCR error:',err);toast('Erro no OCR: '+err.message,'error');}
     finally{setOcrProcessing(false);setOcrProgress(0);URL.revokeObjectURL(url);setOcrPreview(null);if(ocrRef.current)ocrRef.current.value='';}
   },[drivers,toast,parseQRData]);
+  const[quickFill,setQuickFill]=useState(null); // {imgUrl, file}
+
   const handleImg=useCallback(async(e)=>{
     const file=e.target.files?.[0];if(!file)return;
-    // Set image preview
+    // Set image preview immediately
+    const imgUrl=URL.createObjectURL(file);
     const reader=new FileReader();
     reader.onloadend=()=>setImg(reader.result);
     reader.readAsDataURL(file);
-    // Run OCR on the evidence photo to extract data
-    // Wait for Tesseract to be available (max 5 seconds)
-    setOcrProcessing(true);setOcrProgress(5);
-    try{
-      let tReady=false;
-      for(let i=0;i<10;i++){if(typeof Tesseract!=='undefined'&&Tesseract.createWorker){tReady=true;break;}await new Promise(r=>setTimeout(r,500));setOcrProgress(5+i*3);}
-      if(!tReady){toast('📷 Foto salva. OCR não disponível neste dispositivo.','info');setOcrProcessing(false);return;}
-      // Resize image for performance (max 800px on mobile, 1200 on desktop)
-      const isMobile=window.innerWidth<768;const maxSize=isMobile?800:1200;
-      const resized=await new Promise((resolve,reject)=>{
-        const timeout=setTimeout(()=>resolve(null),5000);
-        try{
-          const img2=new Image();
-          img2.onload=()=>{
-            clearTimeout(timeout);
-            let w=img2.width,h=img2.height;
-            if(w>maxSize||h>maxSize){const ratio=Math.min(maxSize/w,maxSize/h);w=Math.round(w*ratio);h=Math.round(h*ratio);}
-            try{const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img2,0,0,w,h);cv.toBlob(b=>resolve(b),'image/jpeg',0.8);}
-            catch(ce){resolve(null);}
-          };
-          img2.onerror=()=>{clearTimeout(timeout);resolve(null);};
-          img2.src=URL.createObjectURL(file);
-        }catch(e2){clearTimeout(timeout);resolve(null);}
-      });
-      setOcrProgress(30);
-      const ocrInput=resized||file;
-      const worker=await Tesseract.createWorker('eng',1,{
-        logger:m=>{if(m.status==='recognizing text'&&m.progress)setOcrProgress(30+Math.round(m.progress*65));}
-      });
-      const{data:{text}}=await worker.recognize(ocrInput);
-      await worker.terminate();
-      console.log('EVIDENCE OCR:',text);
-      const parsed=parseQRData(text);
-      let filled=[];
-      // Auto-fill AT if found and field is empty
-      if(parsed.at&&!atCode){setAtCode(parsed.at);filled.push(`AT: ${parsed.at}`);}
-      // Auto-fill quantity if found and field is empty
-      if(parsed.qty&&!qtd){setQtd(String(parsed.qty));filled.push(`📦 ${parsed.qty} pacotes`);}
-      // Auto-fill driver if found and no driver selected
-      if(parsed.driverId&&!selDriver){
-        const f=drivers.find(d=>d.driver_id===parsed.driverId);
-        if(f){setSelDriver(f);setDSearch(f.driver_id);filled.push(`Driver: ${f.name}`);}
-        else{setDSearch(parsed.driverId);filled.push(`Driver ID: ${parsed.driverId}`);}
-      }
-      if(parsed.driverName&&!selDriver&&!parsed.driverId){filled.push(`Motorista: ${parsed.driverName}`);}
-      // Update scanInfo with OCR results
-      if(parsed.at||parsed.qty||parsed.driverId)setScanInfo(prev=>({...(prev||{}),raw:text,...(parsed.at?{at:parsed.at}:{}),...(parsed.qty?{qty:parsed.qty}:{}),...(parsed.driverId?{driverId:parsed.driverId}:{}),...(parsed.driverName?{driverName:parsed.driverName}:{})}));
-      if(filled.length>0)toast(`📷 Foto: ${filled.join(' • ')}`,'success');
-      else toast('📷 Foto salva como evidência','info');
-    }catch(err){console.warn('Evidence OCR error:',err);toast('📷 Foto salva (OCR indisponível)','info');}
-    finally{setOcrProcessing(false);setOcrProgress(0);if(camRef.current)camRef.current.value='';if(galRef.current)galRef.current.value='';}
+    // Reset inputs
+    if(camRef.current)camRef.current.value='';if(galRef.current)galRef.current.value='';
+    // Try OCR in background (works reliably on PC, may fail on mobile)
+    let ocrDone=false;
+    const tryOCR=async()=>{
+      try{
+        if(typeof Tesseract==='undefined'||!Tesseract.createWorker)return false;
+        setOcrProcessing(true);setOcrProgress(10);
+        const maxSz=window.innerWidth<768?600:1200;
+        // Resize
+        const blob=await new Promise(r=>{const t=setTimeout(()=>r(null),4000);const im=new Image();im.onload=()=>{clearTimeout(t);let w=im.width,h=im.height;if(w>maxSz||h>maxSz){const rt=Math.min(maxSz/w,maxSz/h);w=Math.round(w*rt);h=Math.round(h*rt);}try{const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(im,0,0,w,h);c.toBlob(b=>r(b),'image/jpeg',0.75);}catch(e){r(null);}};im.onerror=()=>{clearTimeout(t);r(null);};im.src=imgUrl;});
+        setOcrProgress(25);
+        const w=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text'&&m.progress)setOcrProgress(25+Math.round(m.progress*70));}});
+        const{data:{text}}=await w.recognize(blob||file);
+        await w.terminate();
+        console.log('OCR:',text);
+        const p=parseQRData(text);
+        let filled=[];
+        if(p.at&&!atCode){setAtCode(p.at);filled.push(`AT: ${p.at}`);}
+        if(p.qty&&!qtd){setQtd(String(p.qty));filled.push(`📦 ${p.qty} pacotes`);ocrDone=true;}
+        if(p.driverId&&!selDriver){const f=drivers.find(d=>d.driver_id===p.driverId);if(f){setSelDriver(f);setDSearch(f.driver_id);filled.push(`Driver: ${f.name}`);}else{setDSearch(p.driverId);}}
+        if(p.at||p.qty||p.driverId)setScanInfo(prev=>({...(prev||{}),raw:text,...(p.at?{at:p.at}:{}),...(p.qty?{qty:p.qty}:{}),...(p.driverId?{driverId:p.driverId}:{}),...(p.driverName?{driverName:p.driverName}:{})}));
+        if(filled.length>0){toast(`📷 ${filled.join(' • ')}`,'success');return true;}
+        return false;
+      }catch(e){console.warn('OCR fail:',e);return false;}
+      finally{setOcrProcessing(false);setOcrProgress(0);}
+    };
+    // Race: try OCR but also show quick-fill after 2s if OCR hasn't found qty
+    const ocrPromise=tryOCR();
+    const timer=setTimeout(()=>{
+      if(!ocrDone&&!qtd){setQuickFill({imgUrl});}
+    },2500);
+    const ocrResult=await ocrPromise;
+    clearTimeout(timer);
+    if(ocrResult&&ocrDone){setQuickFill(null);} // OCR got the qty, no need for quick-fill
+    else if(!qtd){setQuickFill({imgUrl});} // Show quick-fill
+    URL.revokeObjectURL(imgUrl);
   },[drivers,toast,parseQRData,atCode,qtd,selDriver]);
 
   const submit=useCallback(()=>{
@@ -727,9 +724,9 @@ function App(){
     if(!qtd){toast('Informe qtd pacotes','error');return;}
     const analyst=selAnalyst||user?.email||'';
     const analystName=selAnalyst?adminUsers.find(a=>a.email===selAnalyst)?.name||selAnalyst:user?.name||'';
-    const o={id:Date.now(),dataHora:new Date().toLocaleString('pt-BR'),driverId:selDriver?.driver_id||scanInfo?.driverId||'',nome:selDriver?.name||scanInfo?.driverName||'',hub:myHub,cluster:cluster||'',prefs:selDriver?.cluster||'',ocorrencia:ocType,motivo,status,profile,bau:profile==='MOTO'?(BAUS.find(b=>b.id===selBau)?.name||''):'',qtd:parseInt(qtd)||0,at:atCode,obs,img,operador:analyst,operadorNome:analystName,registradoPor:user?.email||'',lat:geo?.lat||null,lng:geo?.lng||null,vehicleType:scanInfo?.vehicleType||'',plate:scanInfo?.plate||''};
+    const o={id:Date.now(),dataHora:new Date().toLocaleString('pt-BR'),driverId:selDriver?.driver_id||scanInfo?.driverId||'',nome:selDriver?.name||scanInfo?.driverName||'',hub:myHub,cluster:cluster||'',isOnhold:isOnhold,devolMotivo:isOnhold?devolMotivo:'',prefs:selDriver?.cluster||'',ocorrencia:ocType,motivo,status,profile,bau:profile==='MOTO'?(BAUS.find(b=>b.id===selBau)?.name||''):'',qtd:parseInt(qtd)||0,at:atCode,obs,img,operador:analyst,operadorNome:analystName,registradoPor:user?.email||'',lat:geo?.lat||null,lng:geo?.lng||null,vehicleType:scanInfo?.vehicleType||'',plate:scanInfo?.plate||''};
     setOcs(p=>[o,...p]);toast('Ocorrência registrada! ✅');
-    setSelDriver(null);setDSearch('');setProfile('');setSelBau('');setQtd('');setMotivo('');setOcType('');setObs('');setAtCode('');setImg(null);setStatus('Pendente');setScanInfo(null);setSelAnalyst('');setCluster('');
+    setSelDriver(null);setDSearch('');setProfile('');setSelBau('');setQtd('');setMotivo('');setOcType('');setObs('');setAtCode('');setImg(null);setStatus('Pendente');setScanInfo(null);setSelAnalyst('');setCluster('');setIsOnhold(false);setDevolMotivo('');
   },[selDriver,scanInfo,ocType,motivo,profile,selBau,qtd,atCode,obs,img,status,user,geo,toast,myHub,selAnalyst,adminUsers]);
 
   // Auto-format cluster: x2->X-2, b14->B-14, ab3->AB-3
@@ -753,8 +750,8 @@ function App(){
   const qM=(v)=>{const n=parseInt(v);if(!n)return'';if(n>100)return`⚠️ ${n} pkgs — EXCESSO!`;if(n<30)return`⚠️ ${n} pkgs — Abaixo do mínimo`;if(n>80)return`📦 ${n} pkgs — Alto`;return`✅ ${n} pkgs — OK`;};
 
   const exportCSV=useCallback(()=>{
-    const h=['Data/Hora','Driver ID','Nome','HUB','Cluster','Perfil','Baú','Pacotes','Ocorrência','Motivo','Status','AT','Obs','Analista','Registrado Por','Veículo','Placa','Lat','Lng'];
-    const rows=filteredOcs.map(o=>[o.dataHora,o.driverId,o.nome,o.hub,o.cluster||'',o.profile,o.bau,o.qtd,o.ocorrencia,o.motivo,o.status,o.at,o.obs,o.operadorNome||o.operador,o.registradoPor||'',o.vehicleType||'',o.plate||'',o.lat||'',o.lng||'']);
+    const h=['Data/Hora','Driver ID','Nome','HUB','Cluster','Perfil','Baú','Pacotes','Onhold','Mot.Devolução','Ocorrência','Motivo','Status','AT','Obs','Analista','Registrado Por','Veículo','Placa','Lat','Lng'];
+    const rows=filteredOcs.map(o=>[o.dataHora,o.driverId,o.nome,o.hub,o.cluster||'',o.profile,o.bau,o.qtd,o.isOnhold?'SIM':'NÃO',o.devolMotivo||'',o.ocorrencia,o.motivo,o.status,o.at,o.obs,o.operadorNome||o.operador,o.registradoPor||'',o.vehicleType||'',o.plate||'',o.lat||'',o.lng||'']);
     const csv=[h,...rows].map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`ocorrencias_${myHub}_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);toast('CSV exportado!');
   },[myHub]);
@@ -764,7 +761,15 @@ function App(){
     if(fSearch){const q=fSearch.toLowerCase();if(!o.nome?.toLowerCase().includes(q)&&!o.driverId?.includes(q)&&!o.at?.toLowerCase().includes(q))return false;}return true;
   }),[ocs,fHub,fStatus,fMotivo,fPerfil,fSearch]);
 
-  const stats=useMemo(()=>{const d=filteredOcs;const tot=d.length,pen=d.filter(o=>o.status==='Pendente').length,ok=d.filter(o=>o.status==='OK').length,ea=d.filter(o=>o.status==='Em análise').length,esc=d.filter(o=>o.status==='Escalado').length,exc=d.filter(o=>o.qtd>100).length,pou=d.filter(o=>o.qtd>0&&o.qtd<30).length;const mc={};d.forEach(o=>{if(o.motivo)mc[o.motivo]=(mc[o.motivo]||0)+1;});const ms=Object.entries(mc).sort((a,b)=>b[1]-a[1]);const pc={};d.forEach(o=>{if(o.profile)pc[o.profile]=(pc[o.profile]||0)+1;});const hc={};d.forEach(o=>{if(o.hub)hc[o.hub]=(hc[o.hub]||0)+1;});const hs=Object.entries(hc).sort((a,b)=>b[1]-a[1]);return{tot,pen,ok,ea,esc,exc,pou,ms,pc,hs};},[filteredOcs]);
+  const stats=useMemo(()=>{const d=filteredOcs;const tot=d.length,pen=d.filter(o=>o.status==='Pendente').length,ok=d.filter(o=>o.status==='OK').length,ea=d.filter(o=>o.status==='Em análise').length,esc=d.filter(o=>o.status==='Escalado').length,exc=d.filter(o=>o.qtd>100).length,pou=d.filter(o=>o.qtd>0&&o.qtd<30).length;const mc={};d.forEach(o=>{if(o.motivo)mc[o.motivo]=(mc[o.motivo]||0)+1;});const ms=Object.entries(mc).sort((a,b)=>b[1]-a[1]);const pc={};d.forEach(o=>{if(o.profile)pc[o.profile]=(pc[o.profile]||0)+1;});const hc={};d.forEach(o=>{if(o.hub)hc[o.hub]=(hc[o.hub]||0)+1;});const hs=Object.entries(hc).sort((a,b)=>b[1]-a[1]);// Driver frequency (same day)
+    const driverFreq={};d.forEach(o=>{const key=o.driverId+'_'+(o.dataHora||'').split(',')[0]?.trim();if(key&&o.driverId){driverFreq[o.driverId]=(driverFreq[o.driverId]||{count:0,name:o.nome,id:o.driverId});driverFreq[o.driverId].count++;}});
+    const repeatDrivers=Object.values(driverFreq).filter(d=>d.count>=2).sort((a,b)=>b.count-a.count);
+    // Top offender drivers (most occurrences overall)
+    const driverOcs={};d.forEach(o=>{if(o.driverId){driverOcs[o.driverId]=(driverOcs[o.driverId]||{count:0,name:o.nome,id:o.driverId});driverOcs[o.driverId].count++;}});
+    const topDrivers=Object.values(driverOcs).sort((a,b)=>b.count-a.count).slice(0,10);
+    // Onhold stats
+    const onhold=d.filter(o=>o.isOnhold).length;
+    return{tot,pen,ok,ea,esc,exc,pou,ms,pc,hs,repeatDrivers,topDrivers,onhold};},[filteredOcs]);
 
   const filtD=useMemo(()=>{if(!dSearch.trim())return[];const q=dSearch.toLowerCase();return drivers.filter(d=>d.driver_id.includes(q)||d.name.toLowerCase().includes(q)).slice(0,5);},[dSearch,drivers]);
   const updateStatus=useCallback((id,ns)=>{setOcs(p=>p.map(o=>o.id===id?{...o,status:ns}:o));toast(`Status → ${ns}`);},[toast]);
@@ -827,7 +832,11 @@ function App(){
             <div className="fg"><label className="fl">Qtd Pacotes *</label><input className="fi" type="number" placeholder="Ex: 45" value={qtd} onChange={e=>setQtd(e.target.value)}/>{qtd&&<div className={`qi ${qC(qtd)}`}><MI n={qC(qtd)==='no'?'check_circle':'warning'} s={{fontSize:16}}/>{qM(qtd)}</div>}</div>
             <div className="fg"><label className="fl">Tipo *</label><select className="fs" value={ocType} onChange={e=>setOcType(e.target.value)}><option value="">Selecione...</option>{OC_TYPES.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
             <div className="fg"><label className="fl">Motivo *</label><div className="mot-g">{MOTIVOS.map(m=><button key={m} className={`mot ${motivo===m?'sel':''}`} onClick={()=>setMotivo(m)}>{m}</button>)}</div></div>
-            <div className="fg"><label className="fl">Status</label><select className="fs" value={status} onChange={e=>setStatus(e.target.value)}><option value="Pendente">⏳ Pendente</option><option value="Em análise">🔍 Em análise</option><option value="OK">✅ Resolvido</option><option value="Escalado">🔴 Escalado</option></select></div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:8,marginBottom:16}}>
+              <div><label className="fl">Status</label><select className="fs" value={status} onChange={e=>setStatus(e.target.value)}><option value="Pendente">⏳ Pendente</option><option value="Em análise">🔍 Em análise</option><option value="OK">✅ Resolvido</option><option value="Escalado">🔴 Escalado</option></select></div>
+              <div><label className="fl">Tipo</label><button className={`btn ${isOnhold?'btn-d':'btn-s'}`} onClick={()=>{setIsOnhold(!isOnhold);if(!isOnhold)setDevolMotivo('');}} style={{width:'100%',marginTop:0,padding:'10px 14px'}}><MI n={isOnhold?'undo':'local_shipping'}/>{isOnhold?'ONHOLD':'Normal'}</button></div>
+            </div>
+            {isOnhold&&(<div className="fg"><label className="fl">Motivo Devolução (Onhold)</label><div className="mot-g">{DEVOL_MOTIVOS.map(m=><button key={m} className={`mot ${devolMotivo===m?'sel':''}`} onClick={()=>setDevolMotivo(m)}>{m}</button>)}</div></div>)}
             <div className="fg"><label className="fl">Observações</label><textarea className="ft" placeholder="Detalhes..." value={obs} onChange={e=>setObs(e.target.value)}/></div>
             <div className="fg"><label className="fl">Evidência (foto da etiqueta = preenche pacotes automaticamente)</label>
               {img?(<div><div className="up has" onClick={()=>{setImg(null);}}><img src={img} alt="Evidência"/></div><button className="btn btn-sm btn-s" onClick={()=>setImg(null)} style={{marginTop:4}}><MI n="delete"/>Remover</button></div>):(<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
@@ -863,17 +872,29 @@ function App(){
           <div className="filter-bar"><input className="fi" placeholder="🔍 Buscar..." value={fSearch} onChange={e=>setFSearch(e.target.value)} style={{maxWidth:180}}/><select className="fs" value={fHub} onChange={e=>setFHub(e.target.value)}><option value="">Hub</option>{allHubs.map(h=><option key={h}>{h}</option>)}</select><select className="fs" value={fStatus} onChange={e=>setFStatus(e.target.value)}><option value="">Status</option><option>Pendente</option><option>Em análise</option><option>OK</option><option>Escalado</option></select><select className="fs" value={fMotivo} onChange={e=>setFMotivo(e.target.value)}><option value="">Motivo</option>{MOTIVOS.map(m=><option key={m}>{m}</option>)}</select>{(fHub||fStatus||fMotivo||fPerfil||fSearch)&&<button className="btn btn-sm btn-d" onClick={()=>{setFHub('');setFStatus('');setFMotivo('');setFPerfil('');setFSearch('');}}><MI n="clear"/>Limpar</button>}</div>
         </div>
         <div style={{padding:0}}>{filteredOcs.length===0?(<div className="empty"><MI n="inbox"/><h3>Sem ocorrências</h3></div>):(<div className="tc"><table><thead><tr><th>Data</th><th>Driver</th><th>HUB</th><th>Perfil</th><th>Pkgs</th><th>Cluster</th><th>Tipo</th><th>Motivo</th><th>AT</th><th>Analista</th><th>Status</th></tr></thead><tbody>
-          {filteredOcs.map(o=>(<tr key={o.id}><td style={{whiteSpace:'nowrap',fontSize:10}}>{o.dataHora}</td><td><div style={{fontWeight:600,fontSize:11}}>{o.nome}</div><div style={{fontSize:9,color:'var(--g400)'}}>ID:{o.driverId}{o.plate?` • ${o.plate}`:''}</div></td><td><span className="bd bd-b">{o.hub}</span></td><td><span className="bd bd-gr">{o.profile==='MOTO'?'🏍️':o.profile==='PASSEIO'?'🚗':'🚐'}{o.profile}</span></td><td><span style={{fontWeight:700,color:(o.qtd>100||o.qtd<30)?'var(--rd)':'var(--gn)'}}>{o.qtd||'—'}</span></td><td style={{fontWeight:700,fontFamily:'monospace',color:'var(--sh)'}}>{o.cluster||'—'}</td><td style={{fontSize:10}}>{o.ocorrencia}</td><td><span className="bd bd-o">{o.motivo}</span></td><td style={{fontFamily:'monospace',fontSize:9}}>{o.at||'—'}</td><td style={{fontSize:10}}>{o.operadorNome||'—'}</td><td><select className="fs" value={o.status} onChange={e=>updateStatus(o.id,e.target.value)} style={{padding:'3px 20px 3px 6px',fontSize:10,minWidth:85}}><option>Pendente</option><option>Em análise</option><option>OK</option><option>Escalado</option></select></td></tr>))}
+          {filteredOcs.map(o=>(<tr key={o.id}><td style={{whiteSpace:'nowrap',fontSize:10}}>{o.dataHora}</td><td><div style={{fontWeight:600,fontSize:11}}>{o.nome}</div><div style={{fontSize:9,color:'var(--g400)'}}>ID:{o.driverId}{o.plate?` • ${o.plate}`:''}</div></td><td><span className="bd bd-b">{o.hub}</span></td><td><span className="bd bd-gr">{o.profile==='MOTO'?'🏍️':o.profile==='PASSEIO'?'🚗':'🚐'}{o.profile}</span></td><td><span style={{fontWeight:700,color:(o.qtd>100||o.qtd<30)?'var(--rd)':'var(--gn)'}}>{o.qtd||'—'}</span></td><td style={{fontWeight:700,fontFamily:'monospace',color:'var(--sh)'}}>{o.cluster||'—'}</td><td style={{fontSize:10}}>{o.isOnhold&&<span className="bd bd-r" style={{marginRight:3}}>ONHOLD</span>}{o.ocorrencia}</td><td><span className="bd bd-o">{o.motivo}</span></td><td style={{fontFamily:'monospace',fontSize:9}}>{o.at||'—'}</td><td style={{fontSize:10}}>{o.operadorNome||'—'}</td><td><select className="fs" value={o.status} onChange={e=>updateStatus(o.id,e.target.value)} style={{padding:'3px 20px 3px 6px',fontSize:10,minWidth:85}}><option>Pendente</option><option>Em análise</option><option>OK</option><option>Escalado</option></select></td></tr>))}
         </tbody></table></div>)}</div>
       </div></div>)}
 
       {/* DASHBOARD */}
       {tab==='dashboard'&&(<div className="fade-in">
-        <div className="st-g">{[['so',stats.tot,'Total','assignment'],['sy',stats.pen,'Pendentes','pending_actions'],['sb',stats.ea,'Em Análise','search'],['sg',stats.ok,'Resolvidas','check_circle'],['sr',stats.esc,'Escaladas','priority_high'],['sr',stats.exc,'Excesso>100','trending_up'],['sy',stats.pou,'Poucos<30','trending_down']].map(([c,v,l,ic],i)=><div key={l+i} className={`st ${c}`}><div className="st-v">{v}</div><div className="st-l">{l}</div><span className="material-icons-round mi st-i">{ic}</span></div>)}</div>
+        {stats.repeatDrivers?.length>0&&(<div className="card" style={{marginBottom:14,border:'2px solid var(--yl)'}}>
+          <div className="card-h" style={{background:'var(--yl1)'}}><h2 style={{color:'#92400E'}}><MI n="warning_amber" s={{color:'var(--yl)'}}/>⚠️ Drivers com 2+ ocorrências hoje ({stats.repeatDrivers.length})</h2></div>
+          <div className="card-b" style={{padding:0}}><div className="tc"><table><thead><tr><th>Driver</th><th>ID</th><th>Ocorrências</th><th>Status</th></tr></thead><tbody>
+            {stats.repeatDrivers.map(d=>(<tr key={d.id}><td style={{fontWeight:700}}>{d.name}</td><td style={{fontFamily:'monospace'}}>{d.id}</td><td><span style={{fontWeight:800,color:'var(--rd)',fontSize:16}}>{d.count}x</span></td><td><span className="bd bd-r">FOCAL POINT</span></td></tr>))}
+          </tbody></table></div></div>
+        </div>)}
+        <div className="st-g">{[['so',stats.tot,'Total','assignment'],['sy',stats.pen,'Pendentes','pending_actions'],['sb',stats.ea,'Em Análise','search'],['sg',stats.ok,'Resolvidas','check_circle'],['sr',stats.esc,'Escaladas','priority_high'],['sr',stats.exc,'Excesso>100','trending_up'],['sy',stats.pou,'Poucos<30','trending_down'],['sr',stats.onhold||0,'Onhold','undo']].map(([c,v,l,ic],i)=><div key={l+i} className={`st ${c}`}><div className="st-v">{v}</div><div className="st-l">{l}</div><span className="material-icons-round mi st-i">{ic}</span></div>)}</div>
         <div className="two">
           <div className="card"><div className="card-h"><h2><MI n="bar_chart"/>Por Motivo</h2></div><div className="card-b">{stats.ms.length===0?<div className="empty" style={{padding:20}}><p>Sem dados</p></div>:<div className="cb-c">{stats.ms.slice(0,10).map(([m,c],i)=>{const mx=stats.ms[0][1];const p=(c/mx)*100;const cols=['var(--sh)','var(--shd)','var(--o400)','var(--yl)','var(--bl)','var(--gn)','var(--g500)','#8B5CF6','#EC4899','#14B8A6'];return<div key={m} className="cb-r"><div className="cb-l" title={m}>{m}</div><div className="cb-t"><div className="cb-f" style={{width:`${p}%`,background:cols[i%cols.length]}}>{c}</div></div></div>;})}</div>}</div></div>
           <div className="card"><div className="card-h"><h2><MI n="pie_chart"/>Por Perfil</h2></div><div className="card-b">{Object.entries(stats.pc).length===0?<div className="empty" style={{padding:20}}><p>Sem dados</p></div>:<div style={{display:'flex',flexDirection:'column',gap:12}}>{Object.entries(stats.pc).map(([pr,c])=>{const ic=pr==='MOTO'?'🏍️':pr==='PASSEIO'?'🚗':'🚐';const pct=stats.tot?((c/stats.tot)*100).toFixed(0):'0';return<div key={pr} style={{display:'flex',alignItems:'center',gap:12,padding:12,background:'var(--g50)',borderRadius:8}}><div style={{fontSize:24}}>{ic}</div><div style={{flex:1}}><div style={{fontWeight:700,fontSize:13}}>{pr}</div><div style={{height:6,background:'var(--g200)',borderRadius:3,marginTop:4,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:'var(--sh)',borderRadius:3}}/></div></div><div style={{fontWeight:800,fontSize:16,color:'var(--sh)'}}>{c}</div><div style={{fontSize:11,color:'var(--g500)'}}>({pct}%)</div></div>;})}</div>}</div></div>
         </div>
+        {stats.topDrivers?.length>0&&(<div className="card" style={{marginTop:14}}>
+          <div className="card-h"><h2><MI n="person_off"/>🔴 Top Drivers Ofensores (Pareto)</h2></div>
+          <div className="card-b"><div className="cb-c">{stats.topDrivers.map((d,i)=>{const mx=stats.topDrivers[0].count;const p=(d.count/mx)*100;const cumPct=stats.tot?((stats.topDrivers.slice(0,i+1).reduce((s,x)=>s+x.count,0)/stats.tot)*100).toFixed(0):'0';return<div key={d.id} className="cb-r"><div className="cb-l" title={d.name} style={{width:130}}><span style={{color:'var(--rd)',fontWeight:700}}>{i+1}°</span> {d.name?.split(' ').slice(0,2).join(' ')}</div><div className="cb-t"><div className="cb-f" style={{width:`${p}%`,background:i<3?'var(--rd)':i<6?'var(--yl)':'var(--g400)'}}>{d.count}</div></div><div style={{fontSize:9,color:'var(--g400)',width:35,textAlign:'right'}}>{cumPct}%</div></div>})}</div>
+            <div style={{marginTop:10,fontSize:10,color:'var(--g500)',display:'flex',alignItems:'center',gap:4}}><MI n="info" s={{fontSize:12}}/>Percentual acumulado — os 3 primeiros são os principais ofensores (FOCAL POINT)</div>
+          </div>
+        </div>)}
       </div>)}
 
       {/* ADMIN */}
@@ -884,6 +905,24 @@ function App(){
         onSync={setAdminUsers} toast={toast}
       />)}
     </main>
+    {quickFill&&(<div className="qf-modal" onClick={e=>{if(e.target===e.currentTarget)setQuickFill(null);}}>
+      <div className="qf-card">
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+          <div style={{fontWeight:700,fontSize:14,display:'flex',alignItems:'center',gap:6}}><MI n="edit" s={{color:'var(--sh)'}}/> Quantos pacotes?</div>
+          <button className="modal-x" onClick={()=>setQuickFill(null)}><MI n="close"/></button>
+        </div>
+        <input className="qf-input" type="number" placeholder="Ex: 90" autoFocus
+          onKeyDown={e=>{if(e.key==='Enter'&&e.target.value){setQtd(e.target.value);toast(`📦 ${e.target.value} pacotes`);setQuickFill(null);}}}
+        />
+        <div style={{display:'flex',gap:8,marginTop:12}}>
+          <button className="btn btn-p btn-lg" style={{flex:1}} onClick={()=>{const v=document.querySelector('.qf-input')?.value;if(v){setQtd(v);toast(`📦 ${v} pacotes`);setQuickFill(null);}else{toast('Digite a quantidade','error');}}}>
+            <MI n="check"/>Confirmar
+          </button>
+          <button className="btn btn-s btn-lg" onClick={()=>setQuickFill(null)}>Pular</button>
+        </div>
+        <div style={{fontSize:10,color:'var(--g400)',marginTop:8,textAlign:'center'}}>Olhe a foto e digite a quantidade de pacotes da etiqueta</div>
+      </div>
+    </div>)}
     {ocrProcessing&&(<div className="ocr-overlay"><div className="ocr-card">
       <MI n="photo_camera" s={{fontSize:48,color:'var(--sh)',marginBottom:12}}/>
       <h3 style={{fontSize:16,fontWeight:700,marginBottom:4}}>Lendo foto da etiqueta...</h3>
