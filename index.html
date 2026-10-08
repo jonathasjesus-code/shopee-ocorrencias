@@ -406,6 +406,11 @@ function AdminPanel({users,onUpdate,onAdd,onRemove,currentUser}){
     <div className="card" style={{marginBottom:16}}>
       <div className="card-h"><h2><MI n="admin_panel_settings"/>Painel Administrativo</h2></div>
       <div className="card-b">
+        <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+          <button className="btn btn-sm btn-s" onClick={()=>{const data=btoa(unescape(encodeURIComponent(JSON.stringify(adminUsers))));navigator.clipboard.writeText(data).then(()=>toast('📋 Configuração copiada! Cole no outro dispositivo.'));}}><MI n="content_copy"/>Copiar config</button>
+          <button className="btn btn-sm btn-s" onClick={async()=>{try{const txt=await navigator.clipboard.readText();const users=JSON.parse(decodeURIComponent(escape(atob(txt))));if(Array.isArray(users)&&users[0]?.email){setAdminUsers(users);toast(`✅ ${users.length} analistas importados!`);}}catch(e){toast('Erro: copie a config válida primeiro','error');}}}><MI n="content_paste"/>Colar config</button>
+          <span style={{fontSize:9,color:'var(--g400)',display:'flex',alignItems:'center'}}>Copie no PC → Cole no celular para sincronizar analistas</span>
+        </div>
         <h3 style={{fontSize:13,marginBottom:12}}>Adicionar Analista</h3>
         <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
           <input className="fi" placeholder="email@shopee.com" value={newEmail} onChange={e=>setNewEmail(e.target.value)} style={{flex:1,minWidth:180}} onKeyDown={e=>{if(e.key==='Enter')addUser();}}/>
@@ -444,7 +449,7 @@ function App(){
   const[tab,setTab]=useState('nova');const[toasts,setToasts]=useState([]);
   const[drivers]=useState(DEMO_DRIVERS);const[selDriver,setSelDriver]=useState(null);const[dSearch,setDSearch]=useState('');
   const[profile,setProfile]=useState('');const[selBau,setSelBau]=useState('');const[qtd,setQtd]=useState('');
-  const[motivo,setMotivo]=useState('');const[ocType,setOcType]=useState('');const[obs,setObs]=useState('');
+  const[motivo,setMotivo]=useState('');const[ocType,setOcType]=useState('');const[obs,setObs]=useState('');const[cluster,setCluster]=useState('');
   const[atCode,setAtCode]=useState('');const[img,setImg]=useState(null);const[status,setStatus]=useState('Pendente');
   const[showScan,setShowScan]=useState('');const[scanMode,setScanMode]=useState('driver');
   const[scanInfo,setScanInfo]=useState(null); // extra info from barcode/QR
@@ -572,7 +577,7 @@ function App(){
     }
   },[drivers,toast,scanMode,parseQRData]);
 
-  const fRef=useRef(null);const ocrRef=useRef(null);
+  const fRef=useRef(null);const ocrRef=useRef(null);const camRef=useRef(null);const galRef=useRef(null);
   const[ocrProcessing,setOcrProcessing]=useState(false);const[ocrProgress,setOcrProgress]=useState(0);const[ocrPreview,setOcrPreview]=useState(null);
 
   // === OCR: Photo of label → extract text → parse ===
@@ -613,10 +618,21 @@ function App(){
     // Run OCR on the evidence photo to extract data
     setOcrProcessing(true);setOcrProgress(0);
     try{
+      if(typeof Tesseract==='undefined'){toast('📷 Foto salva (OCR carregando...)','info');setOcrProcessing(false);return;}
+      // Resize image for mobile performance (max 1200px)
+      const resized=await new Promise((resolve)=>{
+        const img2=new Image();img2.onload=()=>{
+          const max=1200;let w=img2.width,h=img2.height;
+          if(w>max||h>max){const ratio=Math.min(max/w,max/h);w*=ratio;h*=ratio;}
+          const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+          cv.getContext('2d').drawImage(img2,0,0,w,h);
+          cv.toBlob(b=>resolve(b),'image/jpeg',0.85);
+        };img2.onerror=()=>resolve(file);img2.src=URL.createObjectURL(file);
+      });
       const worker=await Tesseract.createWorker('eng',1,{
         logger:m=>{if(m.status==='recognizing text'&&m.progress)setOcrProgress(Math.round(m.progress*100));}
       });
-      const{data:{text}}=await worker.recognize(file);
+      const{data:{text}}=await worker.recognize(resized||file);
       await worker.terminate();
       console.log('EVIDENCE OCR:',text);
       const parsed=parseQRData(text);
@@ -648,17 +664,34 @@ function App(){
     if(!qtd){toast('Informe qtd pacotes','error');return;}
     const analyst=selAnalyst||user?.email||'';
     const analystName=selAnalyst?adminUsers.find(a=>a.email===selAnalyst)?.name||selAnalyst:user?.name||'';
-    const o={id:Date.now(),dataHora:new Date().toLocaleString('pt-BR'),driverId:selDriver?.driver_id||scanInfo?.driverId||'',nome:selDriver?.name||scanInfo?.driverName||'',hub:myHub,prefs:selDriver?.cluster||'',ocorrencia:ocType,motivo,status,profile,bau:profile==='MOTO'?(BAUS.find(b=>b.id===selBau)?.name||''):'',qtd:parseInt(qtd)||0,at:atCode,obs,img,operador:analyst,operadorNome:analystName,registradoPor:user?.email||'',lat:geo?.lat||null,lng:geo?.lng||null,vehicleType:scanInfo?.vehicleType||'',plate:scanInfo?.plate||''};
+    const o={id:Date.now(),dataHora:new Date().toLocaleString('pt-BR'),driverId:selDriver?.driver_id||scanInfo?.driverId||'',nome:selDriver?.name||scanInfo?.driverName||'',hub:myHub,cluster:cluster||'',prefs:selDriver?.cluster||'',ocorrencia:ocType,motivo,status,profile,bau:profile==='MOTO'?(BAUS.find(b=>b.id===selBau)?.name||''):'',qtd:parseInt(qtd)||0,at:atCode,obs,img,operador:analyst,operadorNome:analystName,registradoPor:user?.email||'',lat:geo?.lat||null,lng:geo?.lng||null,vehicleType:scanInfo?.vehicleType||'',plate:scanInfo?.plate||''};
     setOcs(p=>[o,...p]);toast('Ocorrência registrada! ✅');
-    setSelDriver(null);setDSearch('');setProfile('');setSelBau('');setQtd('');setMotivo('');setOcType('');setObs('');setAtCode('');setImg(null);setStatus('Pendente');setScanInfo(null);setSelAnalyst('');
+    setSelDriver(null);setDSearch('');setProfile('');setSelBau('');setQtd('');setMotivo('');setOcType('');setObs('');setAtCode('');setImg(null);setStatus('Pendente');setScanInfo(null);setSelAnalyst('');setCluster('');
   },[selDriver,scanInfo,ocType,motivo,profile,selBau,qtd,atCode,obs,img,status,user,geo,toast,myHub,selAnalyst,adminUsers]);
+
+  // Auto-format cluster: x2->X-2, b14->B-14, ab3->AB-3
+  const formatCluster=(val)=>{
+    const v=val.toUpperCase().replace(/\s/g,'');
+    // Already has hyphen in right place
+    if(/^[A-Z]{1,2}-\d{1,2}$/.test(v))return v;
+    // Missing hyphen: X2->X-2, AB14->AB-14
+    const m=v.match(/^([A-Z]{1,2})(\d{1,2})$/);
+    if(m)return m[1]+'-'+m[2];
+    return v;
+  };
+  const handleClusterChange=(val)=>{
+    setCluster(val);
+  };
+  const handleClusterBlur=()=>{
+    if(cluster.trim())setCluster(formatCluster(cluster.trim()));
+  };
 
   const qC=(v)=>{const n=parseInt(v);if(!n)return'';if(n>100)return'cr';if(n<30)return'wa';if(n>80)return'hi';return'no';};
   const qM=(v)=>{const n=parseInt(v);if(!n)return'';if(n>100)return`⚠️ ${n} pkgs — EXCESSO!`;if(n<30)return`⚠️ ${n} pkgs — Abaixo do mínimo`;if(n>80)return`📦 ${n} pkgs — Alto`;return`✅ ${n} pkgs — OK`;};
 
   const exportCSV=useCallback(()=>{
-    const h=['Data/Hora','Driver ID','Nome','HUB','Perfil','Baú','Pacotes','Ocorrência','Motivo','Status','AT','Obs','Analista','Registrado Por','Veículo','Placa','Lat','Lng'];
-    const rows=filteredOcs.map(o=>[o.dataHora,o.driverId,o.nome,o.hub,o.profile,o.bau,o.qtd,o.ocorrencia,o.motivo,o.status,o.at,o.obs,o.operadorNome||o.operador,o.registradoPor||'',o.vehicleType||'',o.plate||'',o.lat||'',o.lng||'']);
+    const h=['Data/Hora','Driver ID','Nome','HUB','Cluster','Perfil','Baú','Pacotes','Ocorrência','Motivo','Status','AT','Obs','Analista','Registrado Por','Veículo','Placa','Lat','Lng'];
+    const rows=filteredOcs.map(o=>[o.dataHora,o.driverId,o.nome,o.hub,o.cluster||'',o.profile,o.bau,o.qtd,o.ocorrencia,o.motivo,o.status,o.at,o.obs,o.operadorNome||o.operador,o.registradoPor||'',o.vehicleType||'',o.plate||'',o.lat||'',o.lng||'']);
     const csv=[h,...rows].map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`ocorrencias_${myHub}_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);toast('CSV exportado!');
   },[myHub]);
@@ -727,12 +760,24 @@ function App(){
               </select>
               {selAnalyst&&<div style={{fontSize:10,color:'var(--sh)',marginTop:4,fontWeight:600}}><MI n="swap_horiz" s={{fontSize:12,verticalAlign:'middle'}}/> Registrando para: {adminUsers.find(a=>a.email===selAnalyst)?.name||selAnalyst}</div>}
             </div>
+            <div className="fg"><label className="fl">Cluster / Rota</label><input className="fi" placeholder="Ex: X-2 (digite x2 e auto-completa)" value={cluster} onChange={e=>handleClusterChange(e.target.value)} onBlur={handleClusterBlur} onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab')handleClusterBlur()}} style={{textTransform:'uppercase',fontWeight:700,letterSpacing:1}}/>{cluster&&<div style={{fontSize:10,color:'var(--g400)',marginTop:3}}><MI n="route" s={{fontSize:12,verticalAlign:'middle'}}/> Cluster: <strong style={{color:'var(--sh)'}}>{formatCluster(cluster)}</strong></div>}</div>
             <div className="fg"><label className="fl">Qtd Pacotes *</label><input className="fi" type="number" placeholder="Ex: 45" value={qtd} onChange={e=>setQtd(e.target.value)}/>{qtd&&<div className={`qi ${qC(qtd)}`}><MI n={qC(qtd)==='no'?'check_circle':'warning'} s={{fontSize:16}}/>{qM(qtd)}</div>}</div>
             <div className="fg"><label className="fl">Tipo *</label><select className="fs" value={ocType} onChange={e=>setOcType(e.target.value)}><option value="">Selecione...</option>{OC_TYPES.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
             <div className="fg"><label className="fl">Motivo *</label><div className="mot-g">{MOTIVOS.map(m=><button key={m} className={`mot ${motivo===m?'sel':''}`} onClick={()=>setMotivo(m)}>{m}</button>)}</div></div>
             <div className="fg"><label className="fl">Status</label><select className="fs" value={status} onChange={e=>setStatus(e.target.value)}><option value="Pendente">⏳ Pendente</option><option value="Em análise">🔍 Em análise</option><option value="OK">✅ Resolvido</option><option value="Escalado">🔴 Escalado</option></select></div>
             <div className="fg"><label className="fl">Observações</label><textarea className="ft" placeholder="Detalhes..." value={obs} onChange={e=>setObs(e.target.value)}/></div>
-            <div className="fg"><label className="fl">Evidência (foto da etiqueta = preenche pacotes automaticamente)</label><div className={`up ${img?'has':''}`} onClick={()=>fRef.current?.click()}>{img?<img src={img} alt=""/>:<><MI n="photo_camera"/><div style={{fontSize:12,fontWeight:600,color:'var(--g600)'}}>📷 Tirar foto ou selecionar</div><div style={{fontSize:9,color:'var(--g400)'}}>A foto da etiqueta preenche AT e pacotes automaticamente</div></>}</div><input type="file" ref={fRef} accept="image/*" style={{display:'none'}} onChange={handleImg}/>{img&&<button className="btn btn-sm btn-s" onClick={()=>setImg(null)} style={{marginTop:4}}><MI n="delete"/>Remover</button>}</div>
+            <div className="fg"><label className="fl">Evidência (foto da etiqueta = preenche pacotes automaticamente)</label>
+              {img?(<div><div className="up has" onClick={()=>{setImg(null);}}><img src={img} alt="Evidência"/></div><button className="btn btn-sm btn-s" onClick={()=>setImg(null)} style={{marginTop:4}}><MI n="delete"/>Remover</button></div>):(<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                <div className="up" onClick={()=>camRef.current?.click()} style={{padding:16}}>
+                  <MI n="photo_camera" s={{fontSize:28,color:'var(--sh)'}}/><div style={{fontSize:11,fontWeight:700,color:'var(--g700)',marginTop:4}}>📷 Câmera</div><div style={{fontSize:9,color:'var(--g400)'}}>Tirar foto agora</div>
+                </div>
+                <div className="up" onClick={()=>galRef.current?.click()} style={{padding:16}}>
+                  <MI n="photo_library" s={{fontSize:28,color:'var(--bl)'}}/><div style={{fontSize:11,fontWeight:700,color:'var(--g700)',marginTop:4}}>🖼️ Galeria</div><div style={{fontSize:9,color:'var(--g400)'}}>Escolher foto existente</div>
+                </div>
+              </div>)}
+              <input type="file" ref={camRef} accept="image/*" capture="environment" style={{display:'none'}} onChange={handleImg}/>
+              <input type="file" ref={galRef} accept="image/*" style={{display:'none'}} onChange={handleImg}/>
+            </div>
             {geo&&<div style={{fontSize:10,color:'var(--g400)',display:'flex',alignItems:'center',gap:4,marginBottom:6}}><MI n="location_on" s={{fontSize:12}}/>{geo.lat.toFixed(4)}, {geo.lng.toFixed(4)}</div>}
             <button className="btn btn-p btn-lg" onClick={submit} style={{width:'100%',marginTop:8}}><MI n="save"/>Registrar Ocorrência</button>
           </div>
@@ -754,8 +799,8 @@ function App(){
         <div className="card-b" style={{paddingBottom:0}}>
           <div className="filter-bar"><input className="fi" placeholder="🔍 Buscar..." value={fSearch} onChange={e=>setFSearch(e.target.value)} style={{maxWidth:180}}/><select className="fs" value={fHub} onChange={e=>setFHub(e.target.value)}><option value="">Hub</option>{allHubs.map(h=><option key={h}>{h}</option>)}</select><select className="fs" value={fStatus} onChange={e=>setFStatus(e.target.value)}><option value="">Status</option><option>Pendente</option><option>Em análise</option><option>OK</option><option>Escalado</option></select><select className="fs" value={fMotivo} onChange={e=>setFMotivo(e.target.value)}><option value="">Motivo</option>{MOTIVOS.map(m=><option key={m}>{m}</option>)}</select>{(fHub||fStatus||fMotivo||fPerfil||fSearch)&&<button className="btn btn-sm btn-d" onClick={()=>{setFHub('');setFStatus('');setFMotivo('');setFPerfil('');setFSearch('');}}><MI n="clear"/>Limpar</button>}</div>
         </div>
-        <div style={{padding:0}}>{filteredOcs.length===0?(<div className="empty"><MI n="inbox"/><h3>Sem ocorrências</h3></div>):(<div className="tc"><table><thead><tr><th>Data</th><th>Driver</th><th>HUB</th><th>Perfil</th><th>Pkgs</th><th>Tipo</th><th>Motivo</th><th>AT</th><th>Analista</th><th>Status</th></tr></thead><tbody>
-          {filteredOcs.map(o=>(<tr key={o.id}><td style={{whiteSpace:'nowrap',fontSize:10}}>{o.dataHora}</td><td><div style={{fontWeight:600,fontSize:11}}>{o.nome}</div><div style={{fontSize:9,color:'var(--g400)'}}>ID:{o.driverId}{o.plate?` • ${o.plate}`:''}</div></td><td><span className="bd bd-b">{o.hub}</span></td><td><span className="bd bd-gr">{o.profile==='MOTO'?'🏍️':o.profile==='PASSEIO'?'🚗':'🚐'}{o.profile}</span></td><td><span style={{fontWeight:700,color:(o.qtd>100||o.qtd<30)?'var(--rd)':'var(--gn)'}}>{o.qtd||'—'}</span></td><td style={{fontSize:10}}>{o.ocorrencia}</td><td><span className="bd bd-o">{o.motivo}</span></td><td style={{fontFamily:'monospace',fontSize:9}}>{o.at||'—'}</td><td style={{fontSize:10}}>{o.operadorNome||'—'}</td><td><select className="fs" value={o.status} onChange={e=>updateStatus(o.id,e.target.value)} style={{padding:'3px 20px 3px 6px',fontSize:10,minWidth:85}}><option>Pendente</option><option>Em análise</option><option>OK</option><option>Escalado</option></select></td></tr>))}
+        <div style={{padding:0}}>{filteredOcs.length===0?(<div className="empty"><MI n="inbox"/><h3>Sem ocorrências</h3></div>):(<div className="tc"><table><thead><tr><th>Data</th><th>Driver</th><th>HUB</th><th>Perfil</th><th>Pkgs</th><th>Cluster</th><th>Tipo</th><th>Motivo</th><th>AT</th><th>Analista</th><th>Status</th></tr></thead><tbody>
+          {filteredOcs.map(o=>(<tr key={o.id}><td style={{whiteSpace:'nowrap',fontSize:10}}>{o.dataHora}</td><td><div style={{fontWeight:600,fontSize:11}}>{o.nome}</div><div style={{fontSize:9,color:'var(--g400)'}}>ID:{o.driverId}{o.plate?` • ${o.plate}`:''}</div></td><td><span className="bd bd-b">{o.hub}</span></td><td><span className="bd bd-gr">{o.profile==='MOTO'?'🏍️':o.profile==='PASSEIO'?'🚗':'🚐'}{o.profile}</span></td><td><span style={{fontWeight:700,color:(o.qtd>100||o.qtd<30)?'var(--rd)':'var(--gn)'}}>{o.qtd||'—'}</span></td><td style={{fontWeight:700,fontFamily:'monospace',color:'var(--sh)'}}>{o.cluster||'—'}</td><td style={{fontSize:10}}>{o.ocorrencia}</td><td><span className="bd bd-o">{o.motivo}</span></td><td style={{fontFamily:'monospace',fontSize:9}}>{o.at||'—'}</td><td style={{fontSize:10}}>{o.operadorNome||'—'}</td><td><select className="fs" value={o.status} onChange={e=>updateStatus(o.id,e.target.value)} style={{padding:'3px 20px 3px 6px',fontSize:10,minWidth:85}}><option>Pendente</option><option>Em análise</option><option>OK</option><option>Escalado</option></select></td></tr>))}
         </tbody></table></div>)}</div>
       </div></div>)}
 
