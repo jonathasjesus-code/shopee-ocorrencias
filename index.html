@@ -303,15 +303,6 @@ const DEMO_DRIVERS=[
   {driver_id:'1966040',name:'JEAN LUCAS CRUZ DOS SANTOS',phone:'11999887766',hub:'GRU',cluster:"['I-10','J-12','J-13','K-5','K-7']",wave:'2',alocado:'Sim',data:'2026-10-04 20:54'},
   {driver_id:'654347',name:'REBECA SANTOS DE SOUZA',phone:'11988776655',hub:'GRU',cluster:"['G-3','G-5','G-8']",wave:'1',alocado:'Sim',data:'2026-10-07 14:00'},
 ];
-const AT_LOGS=[
-  {time:'06:15',at:'AT-VG-20261005-001',driver:'ANDRE REIS',qty:45,st:'Carregado'},
-  {time:'06:22',at:'AT-VG-20261005-002',driver:'CAIQUE PONTES',qty:112,st:'⚠️ Excesso'},
-  {time:'06:35',at:'AT-VG-20261005-003',driver:'LUCAS BISPO',qty:22,st:'⚠️ Poucos'},
-  {time:'06:41',at:'AT-VG-20261005-004',driver:'RENE SANTOS',qty:67,st:'Carregado'},
-  {time:'06:48',at:'AT-VG-20261005-005',driver:'ADALBERTO RAMOS',qty:38,st:'Carregado'},
-  {time:'07:02',at:'AT-VG-20261005-006',driver:'WILLIANS FREITAS',qty:155,st:'⚠️ Excesso'},
-  {time:'07:10',at:'AT-VG-20261005-007',driver:'FERNANDO FERNANDES',qty:18,st:'⚠️ Poucos'},
-];
 
 const MI=({n,s})=><span className="material-icons-round mi" style={s}>{n}</span>;
 function Toast({toasts}){return<div className="toast-c">{toasts.map(t=><div key={t.id} className={`toast ${t.type==='success'?'suc':t.type==='error'?'err':'inf'}`}><MI n={t.type==='success'?'check_circle':t.type==='error'?'error':'info'} s={{color:t.type==='success'?'var(--gn)':t.type==='error'?'var(--rd)':'var(--bl)',fontSize:18}}/><span className="toast-m">{t.message}</span></div>)}</div>;}
@@ -778,7 +769,7 @@ function App(){
   if(authLoading)return<div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--g50)'}}><div className="spinner" style={{width:32,height:32}}/></div>;
   if(!user)return<LoginScreen onLogin={handleLogin}/>;
 
-  const tabs=[['nova','add_circle','Nova'],['log','receipt_long','Log AT'],['lista','list_alt','Histórico'],['dashboard','dashboard','Dashboard']];
+  const tabs=[['nova','add_circle','Nova'],['lista','list_alt','Histórico'],['dashboard','dashboard','Dashboard']];
   if(isAdmin)tabs.push(['admin','settings','Admin']);
 
   return(<div><Toast toasts={toasts}/>
@@ -857,14 +848,6 @@ function App(){
       </div></div></div>)}
 
       {/* LOG AT */}
-      {tab==='log'&&(<div className="fade-in">
-        <div className="card" style={{marginBottom:14}}>
-          <div className="card-h"><h2><MI n="terminal"/>Log de ATs</h2><button className="btn btn-sm" style={{background:'var(--bl)',color:'#fff'}} onClick={()=>{setScanMode('at');setShowScan('open');}}><MI n="receipt_long"/>Escanear AT</button></div>
-          <div className="card-b"><div className="log">{AT_LOGS.map((l,i)=>(<div key={i} className="log-l"><span className="log-t">[{l.time}]</span><span className="log-at">{l.at}</span><span style={{color:'#555'}}>→</span><span style={{color:'#F0ABFC'}}>{l.driver}</span><span style={{color:'#555'}}>|</span><span className="log-q" style={{color:l.qty>100||l.qty<30?'#EF4444':'#22C55E'}}>{l.qty}pkgs</span><span className="log-s">{l.st}</span></div>))}</div></div>
-        </div>
-        <div className="card"><div className="card-h"><h2><MI n="flash_on"/>Alertas</h2></div><div className="card-b"><div style={{display:'flex',flexDirection:'column',gap:8}}>{AT_LOGS.filter(l=>l.qty>100||l.qty<30).map((l,i)=>(<div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:12,background:l.qty>100?'var(--rd1)':'var(--yl1)',borderRadius:8,flexWrap:'wrap',gap:6}}><div><div style={{fontWeight:700,fontSize:12}}>{l.at} — {l.driver}</div><div style={{fontSize:11,color:'var(--g600)',marginTop:2}}>{l.qty>100?`🔴 ${l.qty}pkgs EXCESSO`:`🟡 ${l.qty}pkgs POUCOS`}</div></div><button className="btn btn-p btn-sm" onClick={()=>{setTab('nova');setAtCode(l.at);setQtd(String(l.qty));const nm=l.driver.split(' ')[0].toLowerCase();const fd=drivers.find(d=>d.name.toLowerCase().includes(nm));if(fd){setSelDriver(fd);setDSearch(fd.driver_id);}l.qty>100?setOcType('Excesso de pacotes (>100)'):setOcType('Poucos pacotes (<30)');}}><MI n="add"/>Abrir</button></div>))}</div></div></div>
-      </div>)}
-
       {/* HISTÓRICO */}
       {tab==='lista'&&(<div className="fade-in"><div className="card">
         <div className="card-h"><h2><MI n="history"/>Histórico <span className="bd bd-o">{filteredOcs.length}</span></h2><button className="btn btn-sm btn-s" onClick={exportCSV}><MI n="download"/>CSV</button></div>
