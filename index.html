@@ -398,6 +398,54 @@ function LoginScreen({onLogin}){
   </div></div>);
 }
 
+// === SYNC PANEL ===
+function SyncPanel({adminUsers,setAdminUsers,toast}){
+  const[syncCode,setSyncCode]=useState('');const[showInput,setShowInput]=useState(false);
+  const generateCode=()=>{
+    const data=JSON.stringify(adminUsers);
+    const encoded=btoa(unescape(encodeURIComponent(data)));
+    // Store in localStorage with a shareable key
+    const code=Math.random().toString(36).substr(2,6).toUpperCase();
+    localStorage.setItem('_sync_'+code,encoded);
+    // Also try to put in URL hash for easy sharing
+    setSyncCode(code);
+    toast(`Código gerado: ${code}`);
+  };
+  const applyCode=(code)=>{
+    const c=code.trim().toUpperCase();
+    // First try localStorage (same device/browser)
+    const local=localStorage.getItem('_sync_'+c);
+    if(local){
+      try{const users=JSON.parse(decodeURIComponent(escape(atob(local))));
+      if(Array.isArray(users)&&users.length>0&&users[0].email){setAdminUsers(users);toast(`✅ ${users.length} analistas sincronizados!`);setSyncCode('');setShowInput(false);return;}}catch(e){}
+    }
+    toast('Código não encontrado. Gere o código no mesmo navegador ou use o link.','error');
+  };
+  const shareLink=()=>{
+    const data=btoa(unescape(encodeURIComponent(JSON.stringify(adminUsers))));
+    const url=window.location.origin+window.location.pathname+'?sync='+encodeURIComponent(data);
+    if(navigator.share){navigator.share({title:'Shopee Ocorrências - Sync',url}).catch(()=>{});}
+    else{navigator.clipboard?.writeText(url).then(()=>toast('🔗 Link copiado! Abra no celular.'));}
+  };
+  return(<div>
+    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+      <button className="btn btn-sm btn-p" onClick={shareLink}><MI n="share"/>Compartilhar link</button>
+      <button className="btn btn-sm btn-s" onClick={generateCode}><MI n="vpn_key"/>Gerar código</button>
+      <button className="btn btn-sm btn-s" onClick={()=>setShowInput(!showInput)}><MI n="input"/>Inserir código</button>
+    </div>
+    {syncCode&&<div style={{marginTop:8,padding:8,background:'#fff',borderRadius:6,display:'flex',alignItems:'center',gap:8}}>
+      <span style={{fontSize:10,color:'var(--g500)'}}>Código:</span>
+      <span style={{fontSize:18,fontWeight:900,letterSpacing:4,color:'var(--sh)',fontFamily:'monospace'}}>{syncCode}</span>
+      <span style={{fontSize:9,color:'var(--g400)'}}>Digite no outro dispositivo</span>
+    </div>}
+    {showInput&&<div style={{marginTop:8,display:'flex',gap:6}}>
+      <input className="fi" placeholder="Código ou cole o link..." style={{fontSize:12}} onKeyDown={e=>{if(e.key==='Enter')applyCode(e.target.value);}} id="sync-input"/>
+      <button className="btn btn-sm btn-p" onClick={()=>{const el=document.getElementById('sync-input');if(el)applyCode(el.value);}}><MI n="sync"/>Sincronizar</button>
+    </div>}
+    <div style={{fontSize:9,color:'var(--g400)',marginTop:6}}>💡 Melhor opção: "Compartilhar link" → abra no celular → analistas sincronizados automaticamente</div>
+  </div>);
+}
+
 // === ADMIN PANEL ===
 function AdminPanel({users,onUpdate,onAdd,onRemove,currentUser}){
   const[newEmail,setNewEmail]=useState('');const[newHub,setNewHub]=useState('VG');
@@ -406,10 +454,9 @@ function AdminPanel({users,onUpdate,onAdd,onRemove,currentUser}){
     <div className="card" style={{marginBottom:16}}>
       <div className="card-h"><h2><MI n="admin_panel_settings"/>Painel Administrativo</h2></div>
       <div className="card-b">
-        <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
-          <button className="btn btn-sm btn-s" onClick={()=>{const data=btoa(unescape(encodeURIComponent(JSON.stringify(adminUsers))));navigator.clipboard.writeText(data).then(()=>toast('📋 Configuração copiada! Cole no outro dispositivo.'));}}><MI n="content_copy"/>Copiar config</button>
-          <button className="btn btn-sm btn-s" onClick={async()=>{try{const txt=await navigator.clipboard.readText();const users=JSON.parse(decodeURIComponent(escape(atob(txt))));if(Array.isArray(users)&&users[0]?.email){setAdminUsers(users);toast(`✅ ${users.length} analistas importados!`);}}catch(e){toast('Erro: copie a config válida primeiro','error');}}}><MI n="content_paste"/>Colar config</button>
-          <span style={{fontSize:9,color:'var(--g400)',display:'flex',alignItems:'center'}}>Copie no PC → Cole no celular para sincronizar analistas</span>
+        <div style={{background:'var(--bl1)',padding:12,borderRadius:8,marginBottom:14}}>
+          <div style={{fontWeight:700,fontSize:12,marginBottom:8,display:'flex',alignItems:'center',gap:6}}><MI n="sync" s={{fontSize:16,color:'var(--bl)'}}/>Sincronizar Analistas entre Dispositivos</div>
+          <SyncPanel adminUsers={adminUsers} setAdminUsers={setAdminUsers} toast={toast}/>
         </div>
         <h3 style={{fontSize:13,marginBottom:12}}>Adicionar Analista</h3>
         <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
@@ -465,6 +512,10 @@ function App(){
   // Load data
   useEffect(()=>{(async()=>{
     const su=await SS.load('_user');if(su&&su.email){const dom=su.email.split('@')[1];if(ALLOWED_DOMAINS.includes(dom))setUser(su);else SS.remove('_user');}setAuthLoading(false);
+    // Check URL for sync parameter
+    const urlParams=new URLSearchParams(window.location.search);
+    const syncData=urlParams.get('sync');
+    if(syncData){try{const users=JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(syncData)))));if(Array.isArray(users)&&users.length>0&&users[0].email){setAdminUsers(users);await SS.save('_admin_users',users);window.history.replaceState({},'',window.location.pathname);console.log('Sync applied:',users.length,'users');}}catch(e){console.warn('Sync parse error:',e);}}
     const so=await SS.load('_ocs');setOcs(so||[]);setOcsLoaded(true);
     // Note: history/dashboard will show all hubs but can be filtered
     const sa=await SS.load('_admin_users');
@@ -616,23 +667,35 @@ function App(){
     reader.onloadend=()=>setImg(reader.result);
     reader.readAsDataURL(file);
     // Run OCR on the evidence photo to extract data
-    setOcrProcessing(true);setOcrProgress(0);
+    // Wait for Tesseract to be available (max 5 seconds)
+    setOcrProcessing(true);setOcrProgress(5);
     try{
-      if(typeof Tesseract==='undefined'){toast('📷 Foto salva (OCR carregando...)','info');setOcrProcessing(false);return;}
-      // Resize image for mobile performance (max 1200px)
-      const resized=await new Promise((resolve)=>{
-        const img2=new Image();img2.onload=()=>{
-          const max=1200;let w=img2.width,h=img2.height;
-          if(w>max||h>max){const ratio=Math.min(max/w,max/h);w*=ratio;h*=ratio;}
-          const cv=document.createElement('canvas');cv.width=w;cv.height=h;
-          cv.getContext('2d').drawImage(img2,0,0,w,h);
-          cv.toBlob(b=>resolve(b),'image/jpeg',0.85);
-        };img2.onerror=()=>resolve(file);img2.src=URL.createObjectURL(file);
+      let tReady=false;
+      for(let i=0;i<10;i++){if(typeof Tesseract!=='undefined'&&Tesseract.createWorker){tReady=true;break;}await new Promise(r=>setTimeout(r,500));setOcrProgress(5+i*3);}
+      if(!tReady){toast('📷 Foto salva. OCR não disponível neste dispositivo.','info');setOcrProcessing(false);return;}
+      // Resize image for performance (max 800px on mobile, 1200 on desktop)
+      const isMobile=window.innerWidth<768;const maxSize=isMobile?800:1200;
+      const resized=await new Promise((resolve,reject)=>{
+        const timeout=setTimeout(()=>resolve(null),5000);
+        try{
+          const img2=new Image();
+          img2.onload=()=>{
+            clearTimeout(timeout);
+            let w=img2.width,h=img2.height;
+            if(w>maxSize||h>maxSize){const ratio=Math.min(maxSize/w,maxSize/h);w=Math.round(w*ratio);h=Math.round(h*ratio);}
+            try{const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img2,0,0,w,h);cv.toBlob(b=>resolve(b),'image/jpeg',0.8);}
+            catch(ce){resolve(null);}
+          };
+          img2.onerror=()=>{clearTimeout(timeout);resolve(null);};
+          img2.src=URL.createObjectURL(file);
+        }catch(e2){clearTimeout(timeout);resolve(null);}
       });
+      setOcrProgress(30);
+      const ocrInput=resized||file;
       const worker=await Tesseract.createWorker('eng',1,{
-        logger:m=>{if(m.status==='recognizing text'&&m.progress)setOcrProgress(Math.round(m.progress*100));}
+        logger:m=>{if(m.status==='recognizing text'&&m.progress)setOcrProgress(30+Math.round(m.progress*65));}
       });
-      const{data:{text}}=await worker.recognize(resized||file);
+      const{data:{text}}=await worker.recognize(ocrInput);
       await worker.terminate();
       console.log('EVIDENCE OCR:',text);
       const parsed=parseQRData(text);
@@ -653,7 +716,7 @@ function App(){
       if(filled.length>0)toast(`📷 Foto: ${filled.join(' • ')}`,'success');
       else toast('📷 Foto salva como evidência','info');
     }catch(err){console.warn('Evidence OCR error:',err);toast('📷 Foto salva (OCR indisponível)','info');}
-    finally{setOcrProcessing(false);setOcrProgress(0);}
+    finally{setOcrProcessing(false);setOcrProgress(0);if(camRef.current)camRef.current.value='';if(galRef.current)galRef.current.value='';}
   },[drivers,toast,parseQRData,atCode,qtd,selDriver]);
 
   const submit=useCallback(()=>{
