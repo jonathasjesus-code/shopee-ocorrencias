@@ -282,7 +282,7 @@ const SS={
 const ALLOWED_DOMAINS=['shopee.com','shopeemobile-external.com'];
 const GOOGLE_CLIENT_ID='810891479912-5v0391ia5104a1hlmc5cvqrtidt72uor.apps.googleusercontent.com';
 const HUBS=['VG','GRU','LAPA','MOOCA'];
-const MOTIVOS=['Dobradinha','Alocado','Nuvem','Volumoso','Driver não quis misturar','Poucos pacotes','Pacote sem etiqueta','Pacote danificado','Rota divergente','Veículo incompatível','Baú pequeno','Excesso de peso','Endereço incorreto','Problema mecânico','No Show','Atraso','Mistura Cluster','Cluster Bombeiro','NOK','Outro'];
+const MOTIVOS=['Dobradinha','Alocado','Nuvem','Volumoso','Driver não quis misturar','Poucos pacotes','Pacote sem etiqueta','Pacote danificado','Rota divergente','Veículo incompatível','Baú pequeno','Excesso de peso','Endereço incorreto','Problema mecânico','No Show','Atraso','Mistura Cluster','Cluster Bombeiro','NOK','Excesso de pacotes (>100)','Recusa de carga','Veículo inadequado','Baú insuficiente','Problema no carregamento','Outro'];
 const DEVOL_MOTIVOS=['Endereço não encontrado','Cliente ausente','Recusa do destinatário','Pacote avariado','Tentativa sem sucesso (3x)','Área de risco','Endereço incorreto/incompleto','Fora da área de cobertura','Pedido cancelado','Pacote extraviado','Problema de acesso (condomínio)','Restrição de horário','Chuva/alagamento','Documento não apresentado','Outro'];
 const OC_TYPES=['Excesso de pacotes (>100)','Poucos pacotes (<30)','No Show','Recusa de carga','Veículo inadequado','Baú insuficiente','Problema no carregamento','Outro'];
 const PROFILES=[{id:'MOTO',icon:'🏍️',name:'Moto',desc:'Motocicleta com baú'},{id:'PASSEIO',icon:'🚗',name:'Passeio',desc:'Carro de passeio'},{id:'FIORINO',icon:'🚐',name:'Fiorino',desc:'Fiorino / Van'}];
@@ -709,16 +709,16 @@ function App(){
 
   const submit=useCallback(()=>{
     if(!selDriver&&!scanInfo?.driverId){toast('Selecione um driver','error');return;}
-    if(!ocType){toast('Selecione o tipo','error');return;}
-    if(!motivo){toast('Selecione o motivo','error');return;}
+    if(isOnhold&&!devolMotivo){toast('Selecione o motivo da devolução','error');return;}
+    if(!isOnhold&&!motivo){toast('Selecione o motivo','error');return;}
     if(!profile){toast('Selecione o perfil','error');return;}
     if(!qtd){toast('Informe qtd pacotes','error');return;}
     const analyst=selAnalyst||user?.email||'';
     const analystName=selAnalyst?adminUsers.find(a=>a.email===selAnalyst)?.name||selAnalyst:user?.name||'';
-    const o={id:Date.now(),dataHora:new Date().toLocaleString('pt-BR'),driverId:selDriver?.driver_id||scanInfo?.driverId||'',nome:selDriver?.name||scanInfo?.driverName||'',hub:myHub,cluster:cluster||'',isOnhold:isOnhold,devolMotivo:isOnhold?devolMotivo:'',prefs:selDriver?.cluster||'',ocorrencia:ocType,motivo,status,profile,bau:profile==='MOTO'?(BAUS.find(b=>b.id===selBau)?.name||''):'',qtd:parseInt(qtd)||0,at:atCode,obs,img,operador:analyst,operadorNome:analystName,registradoPor:user?.email||'',lat:geo?.lat||null,lng:geo?.lng||null,vehicleType:scanInfo?.vehicleType||'',plate:scanInfo?.plate||''};
+    const o={id:Date.now(),dataHora:new Date().toLocaleString('pt-BR'),driverId:selDriver?.driver_id||scanInfo?.driverId||'',nome:selDriver?.name||scanInfo?.driverName||'',hub:myHub,cluster:cluster||'',isOnhold:isOnhold,devolMotivo:isOnhold?devolMotivo:'',prefs:selDriver?.cluster||'',ocorrencia:isOnhold?'Onhold (Devolução)':motivo,motivo:isOnhold?devolMotivo:motivo,status,profile,bau:profile==='MOTO'?(BAUS.find(b=>b.id===selBau)?.name||''):'',qtd:parseInt(qtd)||0,at:atCode,obs,img,operador:analyst,operadorNome:analystName,registradoPor:user?.email||'',lat:geo?.lat||null,lng:geo?.lng||null,vehicleType:scanInfo?.vehicleType||'',plate:scanInfo?.plate||''};
     setOcs(p=>[o,...p]);toast('Ocorrência registrada! ✅');
     setSelDriver(null);setDSearch('');setProfile('');setSelBau('');setQtd('');setMotivo('');setOcType('');setObs('');setAtCode('');setImg(null);setStatus('Pendente');setScanInfo(null);setSelAnalyst('');setCluster('');setIsOnhold(false);setDevolMotivo('');
-  },[selDriver,scanInfo,ocType,motivo,profile,selBau,qtd,atCode,obs,img,status,user,geo,toast,myHub,selAnalyst,adminUsers]);
+  },[selDriver,scanInfo,motivo,isOnhold,devolMotivo,profile,selBau,qtd,atCode,obs,img,status,user,geo,toast,myHub,selAnalyst,adminUsers,cluster]);
 
   // Auto-format cluster: x2->X-2, b14->B-14, ab3->AB-3
   const formatCluster=(val)=>{
@@ -821,13 +821,11 @@ function App(){
             </div>
             <div className="fg"><label className="fl">Cluster / Rota</label><input className="fi" placeholder="Ex: X-2 (digite x2 e auto-completa)" value={cluster} onChange={e=>handleClusterChange(e.target.value)} onBlur={handleClusterBlur} onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab')handleClusterBlur()}} style={{textTransform:'uppercase',fontWeight:700,letterSpacing:1}}/>{cluster&&<div style={{fontSize:10,color:'var(--g400)',marginTop:3}}><MI n="route" s={{fontSize:12,verticalAlign:'middle'}}/> Cluster: <strong style={{color:'var(--sh)'}}>{formatCluster(cluster)}</strong></div>}</div>
             <div className="fg"><label className="fl">Qtd Pacotes *</label><input className="fi" type="number" placeholder="Ex: 45" value={qtd} onChange={e=>setQtd(e.target.value)}/>{qtd&&<div className={`qi ${qC(qtd)}`}><MI n={qC(qtd)==='no'?'check_circle':'warning'} s={{fontSize:16}}/>{qM(qtd)}</div>}</div>
-            <div className="fg"><label className="fl">Tipo *</label><select className="fs" value={ocType} onChange={e=>setOcType(e.target.value)}><option value="">Selecione...</option>{OC_TYPES.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
-            <div className="fg"><label className="fl">Motivo *</label><div className="mot-g">{MOTIVOS.map(m=><button key={m} className={`mot ${motivo===m?'sel':''}`} onClick={()=>setMotivo(m)}>{m}</button>)}</div></div>
             <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:8,marginBottom:16}}>
               <div><label className="fl">Status</label><select className="fs" value={status} onChange={e=>setStatus(e.target.value)}><option value="Pendente">⏳ Pendente</option><option value="Em análise">🔍 Em análise</option><option value="OK">✅ Resolvido</option><option value="Escalado">🔴 Escalado</option></select></div>
-              <div><label className="fl">Tipo</label><button className={`btn ${isOnhold?'btn-d':'btn-s'}`} onClick={()=>{setIsOnhold(!isOnhold);if(!isOnhold)setDevolMotivo('');}} style={{width:'100%',marginTop:0,padding:'10px 14px'}}><MI n={isOnhold?'undo':'local_shipping'}/>{isOnhold?'ONHOLD':'Normal'}</button></div>
+              <div><label className="fl">Onhold</label><button className={`btn ${isOnhold?'btn-d':'btn-s'}`} onClick={()=>{setIsOnhold(!isOnhold);setDevolMotivo('');setMotivo('');}} style={{width:'100%',marginTop:0,padding:'10px 14px'}}><MI n={isOnhold?'undo':'local_shipping'}/>{isOnhold?'ONHOLD':'Normal'}</button></div>
             </div>
-            {isOnhold&&(<div className="fg"><label className="fl">Motivo Devolução (Onhold)</label><div className="mot-g">{DEVOL_MOTIVOS.map(m=><button key={m} className={`mot ${devolMotivo===m?'sel':''}`} onClick={()=>setDevolMotivo(m)}>{m}</button>)}</div></div>)}
+            {isOnhold?(<div className="fg"><label className="fl">Motivo Devolução (Onhold) *</label><div className="mot-g">{DEVOL_MOTIVOS.map(m=><button key={m} className={`mot ${devolMotivo===m?'sel':''}`} onClick={()=>setDevolMotivo(m)}>{m}</button>)}</div></div>):(<div className="fg"><label className="fl">Motivo *</label><div className="mot-g">{MOTIVOS.map(m=><button key={m} className={`mot ${motivo===m?'sel':''}`} onClick={()=>setMotivo(m)}>{m}</button>)}</div></div>)}
             <div className="fg"><label className="fl">Observações</label><textarea className="ft" placeholder="Detalhes..." value={obs} onChange={e=>setObs(e.target.value)}/></div>
             <div className="fg"><label className="fl">Evidência (foto da etiqueta = preenche pacotes automaticamente)</label>
               {img?(<div><div className="up has" onClick={()=>{setImg(null);}}><img src={img} alt="Evidência"/></div><button className="btn btn-sm btn-s" onClick={()=>setImg(null)} style={{marginTop:4}}><MI n="delete"/>Remover</button></div>):(<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
