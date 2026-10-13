@@ -16,6 +16,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
 :root{--sh:#EE4D2D;--shd:#D73211;--shl:#FF6633;--o50:#FFF5F2;--o100:#FFE8E0;--o200:#FFD0C0;--o300:#FFB099;--o400:#FF8866;--o700:#B02A0E;--g50:#F9FAFB;--g100:#F3F4F6;--g200:#E5E7EB;--g300:#D1D5DB;--g400:#9CA3AF;--g500:#6B7280;--g600:#4B5563;--g700:#374151;--g800:#1F2937;--g900:#111827;--gn:#22C55E;--gn1:#DCFCE7;--rd:#EF4444;--rd1:#FEE2E2;--yl:#F59E0B;--yl1:#FEF3C7;--bl:#3B82F6;--bl1:#DBEAFE;--r:12px;--rs:8px;--rl:16px}
@@ -289,6 +290,23 @@ const PROFILES=[{id:'MOTO',icon:'🏍️',name:'Moto',desc:'Motocicleta com baú
 const BAUS=[{id:'bau-80',name:'Baú 80L',desc:'80L Pro Tork',capacity:'~25-30 pkgs'},{id:'bau-126',name:'Baú 126L',desc:'126L MN3',capacity:'~40-50 pkgs'},{id:'bau-modelo3',name:'Baú Grande',desc:'Expandido',capacity:'~60-80 pkgs'}];
 // Default admin
 const DEFAULT_ADMIN='jonathas.jesus@shopee.com';
+// === SUPABASE (banco na nuvem) ===
+const SUPABASE_URL='https://sukrfrfylalyejfbqoeb.supabase.co';
+const SUPABASE_KEY='sb_publishable_PM6ILDqXqCSlP1h97XLEng_pN6yCi2c';
+const sb=window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}}):null;
+const chk=({data,error})=>{if(error)throw new Error(error.message||String(error));return data;};
+const isNetErr=(e)=>!navigator.onLine||/fetch|network|load failed|timeout/i.test(String(e?.message||e));
+const DB={
+  async loadOcs(){const d=chk(await sb.from('ocorrencias').select('id,hub,created_at,payload').order('id',{ascending:false}).limit(3000));return d.map(r=>({...r.payload,id:r.id,hub:r.hub}));},
+  async saveOc(o){const{img,...rest}=o;chk(await sb.from('ocorrencias').upsert({id:o.id,hub:o.hub,payload:{...rest,hasImg:!!img},img:img||null},{onConflict:'id'}));},
+  async updateOc(o){const{img,...rest}=o;chk(await sb.from('ocorrencias').update({payload:rest}).eq('id',o.id));},
+  async getImg(id){const d=chk(await sb.from('ocorrencias').select('img').eq('id',id).single());return d?.img;},
+  async loadAnalysts(){return chk(await sb.from('analistas').select('*').order('hub').order('name'));},
+  async upsertAnalyst(u){chk(await sb.from('analistas').upsert({email:u.email.toLowerCase(),name:u.name||u.email.split('@')[0],hub:u.hub||'VG',role:u.role||'analyst',active:u.active!==false,updated_at:new Date().toISOString()},{onConflict:'email'}));},
+  async selfRegister(user){chk(await sb.from('analistas').upsert({email:user.email.toLowerCase(),name:user.name,hub:'VG',role:'analyst',active:true},{onConflict:'email',ignoreDuplicates:true}));},
+  async deleteAnalyst(email){chk(await sb.from('analistas').delete().eq('email',email));},
+};
+function compressImg(dataUrl,max=1000,q=0.6){return new Promise(res=>{try{const im=new Image();im.onload=()=>{let w=im.width,h=im.height;if(w>max||h>max){const r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r);}const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(im,0,0,w,h);res(cv.toDataURL('image/jpeg',q));};im.onerror=()=>res(dataUrl);im.src=dataUrl;}catch(e){res(dataUrl);}});}
 
 const DEMO_DRIVERS=[
   {driver_id:'2383524',name:'ANDRE REIS DE MACEDO',phone:'11942148087',hub:'VG',cluster:"['J-1','J-11','J-2','J-3','J-4','J-5','J-6','J-7']",wave:'1',alocado:'Não',data:'2026-10-02 20:54'},
@@ -385,7 +403,7 @@ function decodeJwtPayload(token){
 function LoginScreen({onLogin}){
   const[loading,setLoading]=useState(false);const[error,setError]=useState('');const gRef=useRef(null);const initRef=useRef(false);
   useEffect(()=>{if(initRef.current)return;const init=()=>{if(!window.google?.accounts?.id)return;initRef.current=true;
-    window.google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:(r)=>{setLoading(true);setError('');const p=decodeJwtPayload(r.credential);if(!p||!p.email){setError('Erro ao decodificar credencial');setLoading(false);return;}const dom=p.email.split('@')[1];if(!ALLOWED_DOMAINS.includes(dom)){setError(`Acesso negado: @${dom} não autorizado.`);setLoading(false);window.google.accounts.id.disableAutoSelect();return;}onLogin({email:p.email,name:p.name||p.email.split('@')[0],picture:p.picture||null,token:r.credential});},auto_select:false});
+    window.google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:(r)=>{setLoading(true);setError('');const p=decodeJwtPayload(r.credential);if(!p||!p.email){setError('Erro ao decodificar credencial');setLoading(false);return;}const dom=p.email.split('@')[1];if(!ALLOWED_DOMAINS.includes(dom)){setError(`Acesso negado: @${dom} não autorizado.`);setLoading(false);window.google.accounts.id.disableAutoSelect();return;}(async()=>{if(!sb){setError('Banco de dados indisponível (verifique a internet).');setLoading(false);return;}const{error:se}=await sb.auth.signInWithIdToken({provider:'google',token:r.credential});if(se){setError('Login no banco falhou: '+se.message);setLoading(false);return;}onLogin({email:p.email.toLowerCase(),name:p.name||p.email.split('@')[0],picture:p.picture||null});})();},auto_select:false});
     if(gRef.current){window.google.accounts.id.renderButton(gRef.current,{type:'standard',theme:'outline',size:'large',width:320,text:'signin_with',shape:'rectangular',locale:'pt-BR'});}};
     if(window.google?.accounts?.id){init();}else{const iv=setInterval(()=>{if(window.google?.accounts?.id){clearInterval(iv);init();}},200);setTimeout(()=>clearInterval(iv),10000);}
   },[onLogin]);
@@ -454,8 +472,8 @@ function AdminPanel({users,onUpdate,onAdd,onRemove,currentUser,onSync,toast:toas
       <div className="card-h"><h2><MI n="admin_panel_settings"/>Painel Administrativo</h2></div>
       <div className="card-b">
         <div style={{background:'var(--bl1)',padding:12,borderRadius:8,marginBottom:14}}>
-          <div style={{fontWeight:700,fontSize:12,marginBottom:8,display:'flex',alignItems:'center',gap:6}}><MI n="sync" s={{fontSize:16,color:'var(--bl)'}}/>Sincronizar Analistas entre Dispositivos</div>
-          <SyncPanel adminUsers={users} setAdminUsers={onSync} toast={toastFn}/>
+          <div style={{fontWeight:700,fontSize:12,display:'flex',alignItems:'center',gap:6}}><MI n="cloud_done" s={{fontSize:16,color:'var(--bl)'}}/>Analistas salvos na nuvem</div>
+          <div style={{fontSize:10,color:'var(--g500)',marginTop:4}}>Qualquer alteração aqui vale na hora para todos os aparelhos. Quem entra pela primeira vez é cadastrado como Analista do HUB VG — ajuste o HUB abaixo.</div>
         </div>
         <h3 style={{fontSize:13,marginBottom:12}}>Adicionar Analista</h3>
         <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
@@ -508,31 +526,51 @@ function App(){
 
   useEffect(()=>{document.documentElement.setAttribute('data-theme',theme);localStorage.setItem('theme',theme);},[theme]);
   
-  // Load data
+  // Restore session (precisa de sessão válida no Supabase)
   useEffect(()=>{(async()=>{
-    const su=await SS.load('_user');if(su&&su.email){const dom=su.email.split('@')[1];if(ALLOWED_DOMAINS.includes(dom))setUser(su);else SS.remove('_user');}setAuthLoading(false);
-    // Check URL for sync parameter
-    const urlParams=new URLSearchParams(window.location.search);
-    const syncData=urlParams.get('sync');
-    if(syncData){try{const users=JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(syncData)))));if(Array.isArray(users)&&users.length>0&&users[0].email){setAdminUsers(users);await SS.save('_admin_users',users);window.history.replaceState({},'',window.location.pathname);console.log('Sync applied:',users.length,'users');}}catch(e){console.warn('Sync parse error:',e);}}
-    const so=await SS.load('_ocs');setOcs(so||[]);setOcsLoaded(true);
-    // Note: history/dashboard will show all hubs but can be filtered
-    const sa=await SS.load('_admin_users');
-    if(sa&&sa.length>0){setAdminUsers(sa);}else{setAdminUsers([{email:DEFAULT_ADMIN,name:'Jonathas Jesus',hub:'GRU',role:'admin',active:true}]);}
-    setAdminLoaded(true);
+    const su=await SS.load('_user');let session=null;
+    try{session=(await sb?.auth.getSession())?.data?.session||null;}catch(e){}
+    if(su&&su.email&&session&&ALLOWED_DOMAINS.includes(su.email.split('@')[1]))setUser(su);else SS.remove('_user');
+    setAuthLoading(false);
   })();},[]);
-
-  useEffect(()=>{if(ocsLoaded)SS.save('_ocs',ocs);},[ocs,ocsLoaded]);
-  useEffect(()=>{if(adminLoaded)SS.save('_admin_users',adminUsers);},[adminUsers,adminLoaded]);
   useEffect(()=>{if(navigator.geolocation){navigator.geolocation.getCurrentPosition(p=>{setGeo({lat:p.coords.latitude,lng:p.coords.longitude});},()=>{},{enableHighAccuracy:false,timeout:10000});}},[]);
 
   const toast=useCallback((msg,type='success')=>{const id=Date.now();setToasts(p=>[...p,{id,message:msg,type}]);setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),4000);},[]);
   const handleLogin=useCallback(async(ud)=>{if(!ud||!ud.email){toast('Login inválido','error');return;}const dom=ud.email.split('@')[1];if(!ALLOWED_DOMAINS.includes(dom)){toast(`@${dom} não autorizado`,'error');return;}setUser(ud);await SS.save('_user',ud);
-    // Auto-add to admin list if not present
-    setAdminUsers(prev=>{if(prev.find(u=>u.email===ud.email))return prev;return[...prev,{email:ud.email,name:ud.name,hub:'VG',role:ud.email===DEFAULT_ADMIN?'admin':'analyst',active:true}];});
     toast(`Bem-vindo, ${ud.name}!`);
   },[toast]);
-  const handleLogout=useCallback(async()=>{setUser(null);SS.remove('_user');if(window.google?.accounts?.id)window.google.accounts.id.disableAutoSelect();toast('Sessão encerrada','info');},[toast]);
+  const handleLogout=useCallback(async()=>{try{await sb?.auth.signOut();}catch(e){}setUser(null);setOcs([]);setAdminUsers([]);SS.remove('_user');if(window.google?.accounts?.id)window.google.accounts.id.disableAutoSelect();toast('Sessão encerrada','info');},[toast]);
+
+  // === NUVEM: fila offline, migração e carregamento ===
+  const[syncState,setSyncState]=useState('');const[viewImg,setViewImg]=useState(null);const[saving,setSaving]=useState(false);
+  const flushPending=useCallback(async()=>{
+    const pend=(await SS.load('_pending'))||[];if(!pend.length)return;
+    const left=[];for(const o of pend){try{await DB.saveOc(o);}catch(e){left.push(o);}}
+    await SS.save('_pending',left);const sent=pend.length-left.length;
+    if(sent>0)toast(`☁️ ${sent} ocorrência(s) pendente(s) enviada(s)`);
+  },[toast]);
+  const loadAll=useCallback(async(silent)=>{
+    if(!sb||!user)return;
+    try{
+      let an=await DB.loadAnalysts();
+      if(!an.find(a=>a.email.toLowerCase()===user.email.toLowerCase())){await DB.selfRegister(user);an=await DB.loadAnalysts();}
+      // Migração única: dados que estavam só neste aparelho sobem para a nuvem
+      if(!localStorage.getItem('_migrated_cloud_v1')){
+        const me=an.find(a=>a.email.toLowerCase()===user.email.toLowerCase());
+        const la=await SS.load('_admin_users');
+        if(me?.role==='admin'&&Array.isArray(la)){for(const u of la){if(u?.email&&!an.find(a=>a.email.toLowerCase()===u.email.toLowerCase())){try{await DB.upsertAnalyst(u);}catch(e){}}}an=await DB.loadAnalysts();}
+        const lo=await SS.load('_ocs');let n=0;
+        if(Array.isArray(lo)){for(const o of lo){try{const{img,...rest}=o;chk(await sb.from('ocorrencias').upsert({id:o.id,hub:o.hub||me?.hub||'VG',payload:{...rest,hasImg:!!img},img:img||null},{onConflict:'id',ignoreDuplicates:true}));n++;}catch(e){}}}
+        if(n)toast(`☁️ ${n} ocorrência(s) deste aparelho enviada(s) para a nuvem`);
+        localStorage.setItem('_migrated_cloud_v1','1');
+      }
+      setAdminUsers(an);setAdminLoaded(true);
+      await flushPending();
+      setOcs(await DB.loadOcs());setOcsLoaded(true);setSyncState('ok');
+    }catch(e){console.warn('Cloud load error:',e);setSyncState('erro');if(!silent)toast('Erro ao carregar dados da nuvem: '+(e.message||e),'error');}
+  },[user,toast,flushPending]);
+  useEffect(()=>{if(user)loadAll();},[user,loadAll]);
+  useEffect(()=>{if(!user)return;const on=()=>loadAll(true);const vis=()=>{if(document.visibilityState==='visible')loadAll(true);};window.addEventListener('online',on);document.addEventListener('visibilitychange',vis);const iv=setInterval(()=>loadAll(true),60000);return()=>{window.removeEventListener('online',on);document.removeEventListener('visibilitychange',vis);clearInterval(iv);};},[user,loadAll]);
 
   // Is current user admin?
   const isAdmin=useMemo(()=>{if(!user)return false;const u=adminUsers.find(a=>a.email===user.email);return u?.role==='admin'||user.email===DEFAULT_ADMIN;},[user,adminUsers]);
@@ -707,7 +745,7 @@ function App(){
     URL.revokeObjectURL(imgUrl);
   },[drivers,toast,parseQRData,atCode,qtd,selDriver]);
 
-  const submit=useCallback(()=>{
+  const submit=useCallback(async()=>{if(saving)return;
     if(!selDriver&&!scanInfo?.driverId){toast('Selecione um driver','error');return;}
     if(isOnhold&&!devolMotivo){toast('Selecione o motivo da devolução','error');return;}
     if(!isOnhold&&!motivo){toast('Selecione o motivo','error');return;}
@@ -716,9 +754,16 @@ function App(){
     const analyst=selAnalyst||user?.email||'';
     const analystName=selAnalyst?adminUsers.find(a=>a.email===selAnalyst)?.name||selAnalyst:user?.name||'';
     const o={id:Date.now(),dataHora:new Date().toLocaleString('pt-BR'),driverId:selDriver?.driver_id||scanInfo?.driverId||'',nome:selDriver?.name||scanInfo?.driverName||'',hub:myHub,cluster:cluster||'',isOnhold:isOnhold,devolMotivo:isOnhold?devolMotivo:'',prefs:selDriver?.cluster||'',ocorrencia:isOnhold?'Onhold (Devolução)':motivo,motivo:isOnhold?devolMotivo:motivo,status,profile,bau:profile==='MOTO'?(BAUS.find(b=>b.id===selBau)?.name||''):'',qtd:parseInt(qtd)||0,at:atCode,obs,img,operador:analyst,operadorNome:analystName,registradoPor:user?.email||'',lat:geo?.lat||null,lng:geo?.lng||null,vehicleType:scanInfo?.vehicleType||'',plate:scanInfo?.plate||''};
-    setOcs(p=>[o,...p]);toast('Ocorrência registrada! ✅');
+    setSaving(true);
+    o.img=img?await compressImg(img):null;
+    try{await DB.saveOc(o);toast('Ocorrência salva na nuvem ✅');}
+    catch(err){
+      if(isNetErr(err)){const pend=(await SS.load('_pending'))||[];pend.push(o);await SS.save('_pending',pend);toast('Sem internet — salvo no aparelho e enviado automaticamente depois','info');}
+      else{toast('Erro ao salvar: '+err.message,'error');setSaving(false);return;}
+    }
+    setOcs(p=>[{...o,img:undefined,hasImg:!!o.img},...p]);setSaving(false);
     setSelDriver(null);setDSearch('');setProfile('');setSelBau('');setQtd('');setMotivo('');setOcType('');setObs('');setAtCode('');setImg(null);setStatus('Pendente');setScanInfo(null);setSelAnalyst('');setCluster('');setIsOnhold(false);setDevolMotivo('');
-  },[selDriver,scanInfo,motivo,isOnhold,devolMotivo,profile,selBau,qtd,atCode,obs,img,status,user,geo,toast,myHub,selAnalyst,adminUsers,cluster]);
+  },[selDriver,scanInfo,motivo,isOnhold,devolMotivo,profile,selBau,qtd,atCode,obs,img,status,user,geo,toast,myHub,selAnalyst,adminUsers,cluster,saving]);
 
   // Auto-format cluster: x2->X-2, b14->B-14, ab3->AB-3
   const formatCluster=(val)=>{
@@ -763,7 +808,7 @@ function App(){
     return{tot,pen,ok,ea,esc,exc,pou,ms,pc,hs,repeatDrivers,topDrivers,onhold};},[filteredOcs]);
 
   const filtD=useMemo(()=>{if(!dSearch.trim())return[];const q=dSearch.toLowerCase();return drivers.filter(d=>d.driver_id.includes(q)||d.name.toLowerCase().includes(q)).slice(0,5);},[dSearch,drivers]);
-  const updateStatus=useCallback((id,ns)=>{setOcs(p=>p.map(o=>o.id===id?{...o,status:ns}:o));toast(`Status → ${ns}`);},[toast]);
+  const updateStatus=useCallback(async(id,ns)=>{const cur=ocs.find(o=>o.id===id);if(!cur)return;const nu={...cur,status:ns};setOcs(p=>p.map(o=>o.id===id?nu:o));try{await DB.updateOc(nu);toast(`Status → ${ns}`);}catch(e){toast('Erro ao salvar status: '+e.message,'error');}},[ocs,toast]);
   const allHubs=useMemo(()=>[...new Set(ocs.map(o=>o.hub).filter(Boolean))],(ocs));
 
   if(authLoading)return<div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--g50)'}}><div className="spinner" style={{width:32,height:32}}/></div>;
@@ -778,6 +823,7 @@ function App(){
       <div className="dnav">{tabs.map(([k,ic,lb])=><button key={k} className={`dtab ${tab===k?'act':''}`} onClick={()=>setTab(k)}><MI n={ic}/><span>{lb}</span></button>)}</div>
       <div className="hdr-right">
         <div className="lock-icon"><MI n="lock" s={{fontSize:11}}/>AES-256</div>
+        <button className="theme-btn" onClick={()=>{loadAll();toast('Atualizando...','info');}} title={syncState==='erro'?'Sem conexão com a nuvem — tocar para tentar de novo':'Dados na nuvem — tocar para atualizar'}><MI n={syncState==='erro'?'cloud_off':'cloud_done'}/></button>
         <button className="theme-btn" onClick={()=>setTheme(t=>t==='light'?'dark':'light')}><MI n={theme==='light'?'dark_mode':'light_mode'}/></button>
         <div className="hdr-user">{user.picture?<img src={user.picture} className="hdr-avatar" alt=""/>:<div className="hdr-avatar-placeholder">{user.name?.[0]||'?'}</div>}<span>{user.name?.split(' ')[0]}</span></div>
         {isAdmin&&<button className="admin-gear" onClick={()=>setTab('admin')} title="Admin"><MI n="settings"/></button>}
@@ -840,7 +886,7 @@ function App(){
               <input type="file" ref={galRef} accept="image/*" style={{display:'none'}} onChange={handleImg}/>
             </div>
             {geo&&<div style={{fontSize:10,color:'var(--g400)',display:'flex',alignItems:'center',gap:4,marginBottom:6}}><MI n="location_on" s={{fontSize:12}}/>{geo.lat.toFixed(4)}, {geo.lng.toFixed(4)}</div>}
-            <button className="btn btn-p btn-lg" onClick={submit} style={{width:'100%',marginTop:8}}><MI n="save"/>Registrar Ocorrência</button>
+            <button className="btn btn-p btn-lg" onClick={submit} disabled={saving} style={{width:'100%',marginTop:8}}><MI n={saving?'hourglass_top':'save'}/>{saving?'Salvando...':'Registrar Ocorrência'}</button>
           </div>
         </div>
       </div></div></div>)}
@@ -853,7 +899,7 @@ function App(){
           <div className="filter-bar"><input className="fi" placeholder="🔍 Buscar..." value={fSearch} onChange={e=>setFSearch(e.target.value)} style={{maxWidth:180}}/><select className="fs" value={fHub} onChange={e=>setFHub(e.target.value)}><option value="">Hub</option>{allHubs.map(h=><option key={h}>{h}</option>)}</select><select className="fs" value={fStatus} onChange={e=>setFStatus(e.target.value)}><option value="">Status</option><option>Pendente</option><option>Em análise</option><option>OK</option><option>Escalado</option></select><select className="fs" value={fMotivo} onChange={e=>setFMotivo(e.target.value)}><option value="">Motivo</option>{MOTIVOS.map(m=><option key={m}>{m}</option>)}</select>{(fHub||fStatus||fMotivo||fPerfil||fSearch)&&<button className="btn btn-sm btn-d" onClick={()=>{setFHub('');setFStatus('');setFMotivo('');setFPerfil('');setFSearch('');}}><MI n="clear"/>Limpar</button>}</div>
         </div>
         <div style={{padding:0}}>{filteredOcs.length===0?(<div className="empty"><MI n="inbox"/><h3>Sem ocorrências</h3></div>):(<div className="tc"><table><thead><tr><th>Data</th><th>Driver</th><th>HUB</th><th>Perfil</th><th>Pkgs</th><th>Cluster</th><th>Tipo</th><th>Motivo</th><th>AT</th><th>Analista</th><th>Status</th></tr></thead><tbody>
-          {filteredOcs.map(o=>(<tr key={o.id}><td style={{whiteSpace:'nowrap',fontSize:10}}>{o.dataHora}</td><td><div style={{fontWeight:600,fontSize:11}}>{o.nome}</div><div style={{fontSize:9,color:'var(--g400)'}}>ID:{o.driverId}{o.plate?` • ${o.plate}`:''}</div></td><td><span className="bd bd-b">{o.hub}</span></td><td><span className="bd bd-gr">{o.profile==='MOTO'?'🏍️':o.profile==='PASSEIO'?'🚗':'🚐'}{o.profile}</span></td><td><span style={{fontWeight:700,color:(o.qtd>100||o.qtd<30)?'var(--rd)':'var(--gn)'}}>{o.qtd||'—'}</span></td><td style={{fontWeight:700,fontFamily:'monospace',color:'var(--sh)'}}>{o.cluster||'—'}</td><td style={{fontSize:10}}>{o.isOnhold&&<span className="bd bd-r" style={{marginRight:3}}>ONHOLD</span>}{o.ocorrencia}</td><td><span className="bd bd-o">{o.motivo}</span></td><td style={{fontFamily:'monospace',fontSize:9}}>{o.at||'—'}</td><td style={{fontSize:10}}>{o.operadorNome||'—'}</td><td><select className="fs" value={o.status} onChange={e=>updateStatus(o.id,e.target.value)} style={{padding:'3px 20px 3px 6px',fontSize:10,minWidth:85}}><option>Pendente</option><option>Em análise</option><option>OK</option><option>Escalado</option></select></td></tr>))}
+          {filteredOcs.map(o=>(<tr key={o.id}><td style={{whiteSpace:'nowrap',fontSize:10}}>{o.dataHora}</td><td><div style={{fontWeight:600,fontSize:11}}>{o.nome}</div>{o.hasImg&&<button className="btn btn-sm btn-s" style={{padding:'1px 6px',marginTop:2,fontSize:9}} onClick={async()=>{try{const im=await DB.getImg(o.id);if(im)setViewImg(im);else toast('Foto não encontrada','error');}catch(e){toast('Erro ao abrir foto','error');}}}><MI n="image" s={{fontSize:12}}/>foto</button>}<div style={{fontSize:9,color:'var(--g400)'}}>ID:{o.driverId}{o.plate?` • ${o.plate}`:''}</div></td><td><span className="bd bd-b">{o.hub}</span></td><td><span className="bd bd-gr">{o.profile==='MOTO'?'🏍️':o.profile==='PASSEIO'?'🚗':'🚐'}{o.profile}</span></td><td><span style={{fontWeight:700,color:(o.qtd>100||o.qtd<30)?'var(--rd)':'var(--gn)'}}>{o.qtd||'—'}</span></td><td style={{fontWeight:700,fontFamily:'monospace',color:'var(--sh)'}}>{o.cluster||'—'}</td><td style={{fontSize:10}}>{o.isOnhold&&<span className="bd bd-r" style={{marginRight:3}}>ONHOLD</span>}{o.ocorrencia}</td><td><span className="bd bd-o">{o.motivo}</span></td><td style={{fontFamily:'monospace',fontSize:9}}>{o.at||'—'}</td><td style={{fontSize:10}}>{o.operadorNome||'—'}</td><td><select className="fs" value={o.status} onChange={e=>updateStatus(o.id,e.target.value)} style={{padding:'3px 20px 3px 6px',fontSize:10,minWidth:85}}><option>Pendente</option><option>Em análise</option><option>OK</option><option>Escalado</option></select></td></tr>))}
         </tbody></table></div>)}</div>
       </div></div>)}
 
@@ -880,9 +926,9 @@ function App(){
 
       {/* ADMIN */}
       {tab==='admin'&&isAdmin&&(<AdminPanel users={adminUsers} currentUser={user}
-        onUpdate={(i,u)=>setAdminUsers(p=>{const n=[...p];n[i]=u;return n;})}
-        onAdd={(u)=>{if(adminUsers.find(a=>a.email===u.email)){toast('Email já cadastrado','error');return;}setAdminUsers(p=>[...p,u]);toast(`${u.email} adicionado!`);}}
-        onRemove={(i)=>{const email=adminUsers[i]?.email;if(email===DEFAULT_ADMIN){toast('Não pode remover o admin principal','error');return;}setAdminUsers(p=>p.filter((_,idx)=>idx!==i));toast('Removido');}}
+        onUpdate={async(i,u)=>{try{await DB.upsertAnalyst(u);setAdminUsers(p=>{const n=[...p];n[i]=u;return n;});}catch(e){toast('Erro ao salvar: '+e.message,'error');}}}
+        onAdd={async(u)=>{u={...u,email:u.email.trim().toLowerCase()};if(adminUsers.find(a=>a.email.toLowerCase()===u.email)){toast('Email já cadastrado','error');return;}try{await DB.upsertAnalyst(u);setAdminUsers(p=>[...p,u]);toast(`${u.email} adicionado!`);}catch(e){toast('Erro ao adicionar: '+e.message,'error');}}}
+        onRemove={async(i)=>{const email=adminUsers[i]?.email;if(email===DEFAULT_ADMIN){toast('Não pode remover o admin principal','error');return;}try{await DB.deleteAnalyst(email);setAdminUsers(p=>p.filter((_,idx)=>idx!==i));toast('Removido');}catch(e){toast('Erro ao remover: '+e.message,'error');}}}
         onSync={setAdminUsers} toast={toast}
       />)}
     </main>
@@ -912,6 +958,7 @@ function App(){
       <div className="ocr-progress"><div className="ocr-progress-bar" style={{width:`${ocrProgress}%`}}/></div>
       <div style={{fontSize:11,color:'var(--g400)'}}>{ocrProgress}% processado</div>
     </div></div>)}
+    {viewImg&&(<div className="modal-ov" onClick={()=>setViewImg(null)}><img src={viewImg} alt="Evidência" style={{maxWidth:'95%',maxHeight:'88vh',borderRadius:12,boxShadow:'0 10px 40px rgba(0,0,0,.4)'}}/></div>)}
     {showScan&&<QRScanner onScan={handleScan} onClose={()=>setShowScan('')} mode={scanMode}/>}
   </div>);
 }
